@@ -2,24 +2,19 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
+from app.services.auth_service import AuthService
 from typing import Optional
-import hashlib
 
 
 class UserService:
     """Business logic for user operations"""
 
     @staticmethod
-    def hash_password(password: str) -> str:
-        """Hash password using SHA256"""
-        return hashlib.sha256(password.encode()).hexdigest()
-
-    @staticmethod
     def create_user(db: Session, user: UserCreate) -> User:
         """Create new user in database"""
         try:
-            # Hash the password
-            hashed_password = UserService.hash_password(user.password)
+            # Hash the password using bcrypt
+            hashed_password = AuthService.hash_password(user.password)
 
             # Create user object
             db_user = User(

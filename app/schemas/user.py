@@ -27,3 +27,20 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class LoginRequest(BaseModel):
+    """Schema for login request"""
+    email: str
+    password: str
+
+class TokenResponse(BaseModel):
+    """Schema for token response"""
+    access_token: str
+    token_type: str = "bearer"
+    user_id: int
+    email: str
+
+class TokenData(BaseModel):
+    """Schema for token payload"""
+    user_id: int
+    email: str
