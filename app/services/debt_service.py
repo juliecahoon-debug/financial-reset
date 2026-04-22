@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from app.models.debt import Debt, DebtStatus
 from app.schemas.debt import DebtCreate, DebtUpdate
 from typing import Optional, List
@@ -75,50 +76,6 @@ class DebtService:
         db.delete(db_debt)
         db.commit()
         return True
-
-    @staticmethod
-    def calculate_monthly_interest(balance: float, annual_rate: float) -> float:
-        """Calculate monthly interest"""
-        monthly_rate = annual_rate / 100 / 12
-        return balance * monthly_rate
-
-    @staticmethod
-    def calculate_payoff(balance: float, monthly_payment: float, annual_rate: float) -> dict:
-        """
-        Calculate payoff timeline and total interest
-        Returns: {months: int, total_interest: float, total_paid: float}
-        """
-        monthly_rate = annual_rate / 100 / 12
-
-        if monthly_payment <= 0:
-            return {"months": 0, "total_interest": 0, "total_paid": 0, "error": "Invalid payment"}
-
-        remaining_balance = balance
-        months = 0
-        total_interest = 0
-
-        # Simulate payoff month by month (max 60 years)
-        while remaining_balance > 0 and months < 720:
-            interest = remaining_balance * monthly_rate
-            principal = monthly_payment - interest
-
-            if principal <= 0:
-                # Payment doesn't cover interest
-                return {"months": 0, "total_interest": 0, "total_paid": 0, "error": "Payment too low"}
-
-            remaining_balance -= principal
-            total_interest += interest
-            months += 1
-
-            if remaining_balance < 0:
-                remaining_balance = 0
-
-        return {
-            "months": months,
-            "years": months / 12,
-            "total_interest": round(total_interest, 2),
-            "total_paid": round(balance + total_interest, 2)
-        }
 
     @staticmethod
     def get_total_debt(debts: List[Debt]) -> float:
