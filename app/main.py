@@ -5,6 +5,7 @@ from app.routes.user import router as user_router
 from app.routes.auth import router as auth_router
 from app.routes.debt import router as debt_router
 from app.routes.strategy import router as strategy_router
+from app.routes.dashboard import router as dashboard_router
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -13,7 +14,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Financial Reset API",
     description="Debt consolidation and financial optimization",
-    version="0.4.0"
+    version="0.5.0"
 )
 
 # CORS middleware
@@ -41,7 +42,7 @@ async def root():
     return {
         "message": "Welcome to Financial Reset API",
         "docs": "/docs",
-        "version": "0.4.0"
+        "version": "0.5.0"
     }
 
 # Include routes
@@ -49,3 +50,4 @@ app.include_router(user_router)
 app.include_router(auth_router)
 app.include_router(debt_router)
 app.include_router(strategy_router)
+app.include_router(dashboard_router)
