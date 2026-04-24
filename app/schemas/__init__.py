@@ -4,6 +4,11 @@ from app.schemas.strategy import (
     StrategyType, DebtPayoffProjection, StrategyProjection,
     StrategyComparison, FinancialScore, StrategyRecommendation
 )
+from app.schemas.spending import (
+    SpendingCategory, BudgetCategory, BudgetRecommendation,
+    SpendingBreakdown, UserSpendingAnalysis, SavingsPotential,
+    SavingsPotentialAnalysis, SpendingEstimate
+)
 from app.schemas.dashboard import (
     DebtBreakdown, DashboardSummary, EmergencyFundRecommendation,
     CashFlowAnalysis, FinancialHealthMetrics, DebtPayoffProjection,
@@ -16,5 +21,9 @@ __all__ = [
     "StrategyType", "DebtPayoffProjection", "StrategyProjection",
     "StrategyComparison", "FinancialScore", "StrategyRecommendation",
     "DebtBreakdown", "DashboardSummary", "EmergencyFundRecommendation",
-    "CashFlowAnalysis", "FinancialHealthMetrics", "FinancialGoal"
+    "CashFlowAnalysis", "FinancialHealthMetrics", "FinancialGoal",
+    "SpendingCategory", "BudgetCategory", "BudgetRecommendation",
+    "SpendingBreakdown", "UserSpendingAnalysis", "SavingsPotential",
+    "SavingsPotentialAnalysis", "SpendingEstimate"
 ]
+
