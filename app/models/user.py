@@ -22,5 +22,9 @@ class User(Base):
     # Add to User class:
     transactions = relationship("Transaction", back_populates="user", cascade="all, delete-orphan")
 
+    # Add to User class:
+    goals = relationship("Goal", back_populates="user", cascade="all, delete-orphan")
+    scenarios = relationship("Scenario", back_populates="user", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, username={self.username})>"

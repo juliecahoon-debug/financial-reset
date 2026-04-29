@@ -5,8 +5,9 @@ from app.routes.strategy import router as strategy_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.spending import router as spending_router
 from app.routes.transaction import router as transaction_router
+from app.routes.goal import router as goal_router
 
 __all__ = [
     "user_router", "auth_router", "debt_router", "strategy_router",
-    "dashboard_router", "spending_router", "transaction_router"
+    "dashboard_router", "spending_router", "transaction_router", "goal_router",
 ]

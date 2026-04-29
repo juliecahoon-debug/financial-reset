@@ -104,3 +104,75 @@ class Transaction(Base):
 
     def __repr__(self):
         return f"<Transaction {self.id}: {self.merchant} ${self.amount}>"
+
+
+class Goal(Base):
+    """User financial goals"""
+    __tablename__ = "goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    # Goal details
+    goal_type = Column(String(50), nullable=False)  # house, car, vacation, retirement, savings
+    name = Column(String(255), nullable=False)  # "Down payment for house", "New car"
+    description = Column(String(500), nullable=True)
+    target_amount = Column(Float, nullable=False)
+    current_savings = Column(Float, default=0)
+    target_date = Column(Date, nullable=False)
+    priority = Column(Integer, default=1)  # 1=highest, 10=lowest
+
+    # Metadata
+    status = Column(String(50), default="active")  # active, achieved, paused, cancelled
+    monthly_allocation = Column(Float, nullable=True)  # Auto-calculated
+    estimated_completion_date = Column(Date, nullable=True)
+
+    # Interest/growth assumptions
+    annual_return_rate = Column(Float, default=0.02)  # Default 2% (HYSA)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="goals")
+
+    def __repr__(self):
+        return f"<Goal {self.id}: {self.name} - ${self.target_amount}>"
+
+
+class Scenario(Base):
+    """What-if scenarios for goal planning"""
+    __tablename__ = "scenarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=False, index=True)
+
+    # Scenario details
+    name = Column(String(255), nullable=False)  # "Conservative", "Aggressive", etc
+    description = Column(String(500), nullable=True)
+
+    # Assumptions for this scenario
+    monthly_debt_payment = Column(Float, nullable=False)
+    monthly_debt_payoff_months = Column(Integer, nullable=False)
+    monthly_goal_allocation = Column(Float, nullable=False)
+    annual_return_rate = Column(Float, default=0.02)
+
+    # Results
+    total_months_to_goal = Column(Integer, nullable=True)
+    debt_payoff_month = Column(Integer, nullable=True)
+    goal_completion_month = Column(Integer, nullable=True)
+    total_invested = Column(Float, nullable=True)
+    total_interest_earned = Column(Float, nullable=True)
+    final_goal_amount = Column(Float, nullable=True)
+
+    # Credit impact
+    estimated_credit_score_improvement = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="scenarios")
+
+    def __repr__(self):
+        return f"<Scenario {self.id}: {self.name}>"

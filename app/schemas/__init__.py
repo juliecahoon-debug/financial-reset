@@ -14,6 +14,12 @@ from app.schemas.dashboard import (
     CashFlowAnalysis, FinancialHealthMetrics, DebtPayoffProjection,
     FinancialGoal
 )
+from app.schemas.goal import (
+    GoalType, GoalStatus, GoalCreate, GoalUpdate, GoalResponse,
+    GoalTimeline, Scenario, ScenarioComparison, GoalDashboard
+)
+
+
 
 __all__ = [
     "UserCreate", "UserUpdate", "UserResponse", "LoginRequest", "TokenResponse",
@@ -24,6 +30,8 @@ __all__ = [
     "CashFlowAnalysis", "FinancialHealthMetrics", "FinancialGoal",
     "SpendingCategory", "BudgetCategory", "BudgetRecommendation",
     "SpendingBreakdown", "UserSpendingAnalysis", "SavingsPotential",
-    "SavingsPotentialAnalysis", "SpendingEstimate"
+    "SavingsPotentialAnalysis", "SpendingEstimate", "GoalType", "GoalStatus",
+    "GoalCreate", "GoalUpdate", "GoalResponse", "GoalTimeline", "Scenario",
+    "ScenarioComparison", "GoalDashboard"
 ]
 
