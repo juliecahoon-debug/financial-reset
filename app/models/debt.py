@@ -176,3 +176,65 @@ class Scenario(Base):
 
     def __repr__(self):
         return f"<Scenario {self.id}: {self.name}>"
+
+
+class BalanceTransfer(Base):
+    """Balance transfer promotional offer"""
+    __tablename__ = "balance_transfers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    # Card details
+    card_name = Column(String(255), nullable=False)  # "Chase Sapphire", "Amex Blue", etc
+    intro_apr = Column(Float, default=0.0)  # 0% for promo period
+    regular_apr = Column(Float, nullable=False)  # APR after promo ends
+    promo_months = Column(Integer, nullable=False)  # How long 0% lasts
+    balance_transfer_fee = Column(Float, default=0.03)  # 3% is standard
+    credit_limit = Column(Float, nullable=False)  # How much you can transfer
+
+    # Status
+    status = Column(String(50), default="available")  # available, selected, completed
+
+    # User's decision
+    transfer_amount = Column(Float, nullable=True)  # How much they'll transfer
+    estimated_monthly_payment = Column(Float, nullable=True)  # What they'll pay
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="balance_transfers")
+
+    def __repr__(self):
+        return f"<BalanceTransfer {self.id}: {self.card_name}>"
+
+
+class ConsolidationLoan(Base):
+    """Debt consolidation loan offer"""
+    __tablename__ = "consolidation_loans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    # Loan details
+    lender_name = Column(String(255), nullable=False)  # "SoFi", "LendingClub", etc
+    loan_amount = Column(Float, nullable=False)  # Total debt being consolidated
+    loan_apr = Column(Float, nullable=False)  # Interest rate offered
+    loan_term_months = Column(Integer, nullable=False)  # 36, 60, 84 months
+    monthly_payment = Column(Float, nullable=False)  # Fixed payment
+    origination_fee = Column(Float, default=0.02)  # 2% typical
+
+    # Status
+    status = Column(String(50), default="available")  # available, selected, completed
+
+    # Comparison metrics
+    total_interest = Column(Float, nullable=True)  # Total interest paid
+    total_payoff = Column(Float, nullable=True)  # Principal + interest
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="consolidation_loans")
+
+    def __repr__(self):
+        return f"<ConsolidationLoan {self.id}: {self.lender_name}>"

@@ -24,6 +24,8 @@ class User(Base):
 
     # Add to User class:
     goals = relationship("Goal", back_populates="user", cascade="all, delete-orphan")
+    balance_transfers = relationship("BalanceTransfer", back_populates="user", cascade="all, delete-orphan")
+    consolidation_loans = relationship("ConsolidationLoan", back_populates="user", cascade="all, delete-orphan")
     scenarios = relationship("Scenario", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
