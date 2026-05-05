@@ -28,5 +28,8 @@ class User(Base):
     consolidation_loans = relationship("ConsolidationLoan", back_populates="user", cascade="all, delete-orphan")
     scenarios = relationship("Scenario", back_populates="user", cascade="all, delete-orphan")
 
+    # Add inside User class:
+    hardship_plans = relationship("HardshipPlan", back_populates="user", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, username={self.username})>"

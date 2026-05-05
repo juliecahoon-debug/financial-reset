@@ -8,6 +8,8 @@ from app.routes.transaction import router as transaction_router
 from app.routes.goal import router as goal_router
 from app.routes.balance_transfer import router as balance_transfer_router
 from app.routes.consolidation import router as consolidation_router
+from app.routes.hardship import router as hardship_router
+
 
 __all__ = [
     "user_router",
@@ -19,5 +21,6 @@ __all__ = [
     "transaction_router",
     "goal_router",
     "balance_transfer_router",
-    "consolidation_router"
+    "consolidation_router",
+    "hardship_router"
 ]

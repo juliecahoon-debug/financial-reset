@@ -11,6 +11,7 @@ from app.routes.transaction import router as transaction_router
 from app.routes.goal import router as goal_router
 from app.routes.balance_transfer import router as balance_transfer_router
 from app.routes.consolidation import router as consolidation_router
+from app.routes.hardship import router as hardship_router
 
 
 
@@ -21,7 +22,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Financial Reset API",
     description="Debt consolidation and financial optimization with transaction analysis",
-    version="0.9.0"
+    version="0.10.0"
 )
 
 # CORS middleware
@@ -71,3 +72,4 @@ app.include_router(transaction_router)
 app.include_router(goal_router)
 app.include_router(balance_transfer_router)
 app.include_router(consolidation_router)
+app.include_router(hardship_router)

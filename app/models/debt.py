@@ -57,6 +57,8 @@ class Debt(Base):
     # Relationship
     user = relationship("User", back_populates="debts")
 
+    hardship_plans = relationship("HardshipPlan", back_populates="debt", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<Debt(id={self.id}, user_id={self.user_id}, name={self.name}, balance={self.balance})>"
 
@@ -238,3 +240,44 @@ class ConsolidationLoan(Base):
 
     def __repr__(self):
         return f"<ConsolidationLoan {self.id}: {self.lender_name}>"
+
+
+class HardshipPlan(Base):
+    """Hardship relief plan for users in financial distress"""
+    __tablename__ = "hardship_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    debt_id = Column(Integer, ForeignKey("debts.id"), nullable=False, index=True)
+
+    # Plan type
+    plan_type = Column(String(50), nullable=False)  # deferment, forbearance, settlement
+
+    # Deferment fields
+    deferment_months = Column(Integer, nullable=True)  # How many months to pause
+    interest_accrues_during = Column(Boolean, default=True)  # Does interest still accrue?
+
+    # Forbearance fields
+    reduced_payment_amount = Column(Float, nullable=True)  # New payment (lower than minimum)
+    forbearance_months = Column(Integer, nullable=True)  # How long reduced payments last
+
+    # Settlement fields
+    settlement_percentage = Column(Float, nullable=True)  # Pay 50% of debt to settle (0.50)
+    settlement_amount = Column(Float, nullable=True)  # Total settlement amount
+
+    # Status and details
+    status = Column(String(50), default="available")  # available, applied, approved, rejected, completed
+    reason_for_hardship = Column(String(500), nullable=True)  # Why user needs help
+
+    # Impact
+    credit_impact = Column(String(255), nullable=True)  # How it affects credit
+    total_cost = Column(Float, nullable=True)  # Total cost of this plan
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="hardship_plans")
+    debt = relationship("Debt", back_populates="hardship_plans")
+
+    def __repr__(self):
+        return f"<HardshipPlan {self.id}: {self.plan_type}>"
