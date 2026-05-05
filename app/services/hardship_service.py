@@ -617,3 +617,232 @@ class HardshipService:
         db.refresh(hardship_plan)
 
         return hardship_plan
+
+    @staticmethod
+    def compare_all_hardship_options(debt: Debt, custom_monthly_payment: float = None) -> Dict:
+        """
+        Compare hardship options with payment scenarios (B+C combined)
+
+        Returns preset scenarios (min, 2x, 3x, 4x) + optional custom scenario
+        Plus hardship options (settlement, forbearance, deferment)
+        """
+
+        interest_rate = debt.interest_rate / 100 if debt.interest_rate > 1 else debt.interest_rate
+
+        comparison = {
+            "debt_id": debt.id,
+            "debt_name": debt.name,
+            "current_balance": debt.balance,
+            "minimum_payment": debt.minimum_payment,
+            "interest_rate": debt.interest_rate,
+            "payment_scenarios": [],
+            "custom_scenario": None,
+            "hardship_options": []
+        }
+
+        # Helper function to calculate payoff
+        def calculate_payoff(monthly_payment: float):
+            months = 0
+            balance = debt.balance
+            total_interest = 0
+
+            while balance > 0 and months < 360:
+                monthly_interest = balance * (interest_rate / 12)
+                total_interest += monthly_interest
+                balance += monthly_interest
+                balance -= monthly_payment
+                months += 1
+
+            return {
+                "months": months,
+                "total_interest": round(total_interest, 2),
+                "total_paid": round(debt.balance + total_interest, 2)
+            }
+
+        # Calculate minimum payment payoff for reference
+        min_payoff = calculate_payoff(debt.minimum_payment)
+
+        # PRESET PAYMENT SCENARIOS
+        preset_scenarios = [
+            ("minimum", "Minimum Payment", debt.minimum_payment),
+            ("moderate", "2x Minimum (Moderate)", debt.minimum_payment * 2),
+            ("aggressive", "3x Minimum (Aggressive)", debt.minimum_payment * 3),
+            ("very_aggressive", "4x Minimum (Very Aggressive)", debt.minimum_payment * 4)
+        ]
+
+        for scenario_type, label, payment_amount in preset_scenarios:
+            payoff = calculate_payoff(payment_amount)
+
+            comparison["payment_scenarios"].append({
+                "scenario_type": scenario_type,
+                "label": label,
+                "monthly_payment": round(payment_amount, 2),
+                "months_to_payoff": payoff["months"],
+                "years_to_payoff": round(payoff["months"] / 12, 1),
+                "total_interest_paid": payoff["total_interest"],
+                "total_amount_paid": payoff["total_paid"],
+                "interest_savings_vs_minimum": round(min_payoff["total_interest"] - payoff["total_interest"], 2),
+                "credit_impact": "Positive - on-time payments build credit",
+                "credit_score_change": "+50 to +100 points (with on-time payments)",
+                "pros": [
+                    f"Pay off in {payoff['months'] // 12} years, {payoff['months'] % 12} months",
+                    f"Only ${payoff['total_interest']} in interest",
+                    "Build/rebuild credit history",
+                    "No credit damage"
+                ],
+                "cons": [
+                    f"Requires ${payment_amount:.2f}/month",
+                    f"Total cost ${payoff['total_paid']}"
+                ],
+                "recommendation_score": 85
+            })
+
+        # CUSTOM PAYMENT SCENARIO (if provided)
+        if custom_monthly_payment:
+            if custom_monthly_payment <= 0:
+                raise ValueError("Payment amount must be greater than $0")
+
+            payoff = calculate_payoff(custom_monthly_payment)
+
+            comparison["custom_scenario"] = {
+                "scenario_type": "custom",
+                "label": f"Custom Payment (${custom_monthly_payment:.2f}/month)",
+                "monthly_payment": round(custom_monthly_payment, 2),
+                "months_to_payoff": payoff["months"],
+                "years_to_payoff": round(payoff["months"] / 12, 1),
+                "total_interest_paid": payoff["total_interest"],
+                "total_amount_paid": payoff["total_paid"],
+                "interest_savings_vs_minimum": round(min_payoff["total_interest"] - payoff["total_interest"], 2),
+                "credit_impact": "Positive - on-time payments build credit",
+                "credit_score_change": "+50 to +100 points (with on-time payments)",
+                "pros": [
+                    f"Pay off in {payoff['months'] // 12} years, {payoff['months'] % 12} months",
+                    f"Only ${payoff['total_interest']} in interest",
+                    "Build/rebuild credit history",
+                    "Customized to your budget"
+                ],
+                "cons": [
+                    f"Requires ${custom_monthly_payment:.2f}/month",
+                    f"Total cost ${payoff['total_paid']}"
+                ],
+                "recommendation_score": 85
+            }
+
+        # GET DEBT TYPE FOR HARDSHIP OPTIONS
+        if hasattr(debt.debt_type, 'value'):
+            debt_type = debt.debt_type.value.upper()
+        else:
+            debt_type = str(debt.debt_type).upper()
+
+        # HARDSHIP OPTIONS (use minimum payment for these)
+
+        # Settlement option
+        if "CREDIT_CARD" in debt_type or "PERSONAL_LOAN" in debt_type:
+            settlement_percentage = 0.50
+            settlement_amount = debt.balance * settlement_percentage
+
+            comparison["hardship_options"].append({
+                "option_type": "settlement",
+                "name": "Debt Settlement Negotiation",
+                "description": "Negotiate to pay lump sum (typically 40-60% of balance)",
+                "lump_sum_required": round(settlement_amount, 2),
+                "settlement_percentage": settlement_percentage,
+                "amount_forgiven": round(debt.balance - settlement_amount, 2),
+                "months_to_save_at_minimum": round(settlement_amount / debt.minimum_payment,
+                                                   1) if debt.minimum_payment > 0 else 0,
+                "total_interest_paid": 0,
+                "total_amount_paid": round(settlement_amount, 2),
+                "credit_impact": "SEVERE negative - 100-150 point drop, stays 7 years",
+                "credit_score_change": "-100 to -150 points (takes 3-5 years to recover)",
+                "tax_implications": f"Forgiven ${debt.balance - settlement_amount:.2f} may be taxable income",
+                "pros": [
+                    f"Save ${debt.balance - settlement_amount:.2f} (50%)",
+                    "Resolve debt faster (one lump payment)",
+                    "Stop interest accrual immediately"
+                ],
+                "cons": [
+                    f"Requires ${settlement_amount:.2f} lump sum",
+                    "SEVERE credit damage (100-150 points)",
+                    "Settled debt on credit for 7 years",
+                    f"Potential tax bill of ~${(debt.balance - settlement_amount) * 0.22:.2f}"
+                ],
+                "recommendation_score": 30
+            })
+
+        # Forbearance option
+        if "STUDENT_LOAN" in debt_type or "PERSONAL_LOAN" in debt_type or "AUTO_LOAN" in debt_type:
+            forbearance_months = 6
+            reduced_payment = max(debt.minimum_payment * 0.50, 50)
+
+            balance = debt.balance
+            forbearance_interest = 0
+
+            for month in range(forbearance_months):
+                monthly_interest = balance * (interest_rate / 12)
+                forbearance_interest += monthly_interest
+                balance += monthly_interest
+                balance -= reduced_payment
+                if balance < 0:
+                    balance = 0
+                    break
+
+            comparison["hardship_options"].append({
+                "option_type": "forbearance",
+                "name": "Forbearance/Reduced Payments",
+                "description": f"Reduce payments to ${reduced_payment:.2f}/month for 6 months",
+                "monthly_payment_during": round(reduced_payment, 2),
+                "forbearance_months": forbearance_months,
+                "forbearance_interest": round(forbearance_interest, 2),
+                "credit_impact": "Moderate negative - 20-50 point drop",
+                "credit_score_change": "-20 to -50 points (recovers in 6-12 months)",
+                "pros": [
+                    f"Reduce payments to ${reduced_payment:.2f}/month",
+                    f"Save ${(debt.minimum_payment - reduced_payment) * forbearance_months:.2f} over 6 months",
+                    "Temporary relief"
+                ],
+                "cons": [
+                    f"Interest accrues: ${forbearance_interest:.2f}",
+                    "Only 6 months of relief",
+                    "Credit score drops temporarily"
+                ],
+                "recommendation_score": 70
+            })
+
+        # Deferment option
+        if "STUDENT_LOAN" in debt_type:
+            deferment_months = 6
+
+            balance = debt.balance
+            deferment_interest = 0
+
+            for month in range(deferment_months):
+                monthly_interest = balance * (interest_rate / 12)
+                deferment_interest += monthly_interest
+                balance += monthly_interest
+
+            comparison["hardship_options"].append({
+                "option_type": "deferment",
+                "name": "Student Loan Deferment",
+                "description": "Pause payments for 6 months while interest accrues",
+                "monthly_payment_during": 0,
+                "deferment_months": deferment_months,
+                "deferment_interest": round(deferment_interest, 2),
+                "credit_impact": "Minor negative - 20-30 point drop",
+                "credit_score_change": "-20 to -30 points (recovers in 6-12 months)",
+                "pros": [
+                    "No payments for 6 months",
+                    "Available for federal student loans",
+                    "Minimal credit impact"
+                ],
+                "cons": [
+                    f"Interest accrues: ${deferment_interest:.2f}",
+                    "Only temporary relief"
+                ],
+                "recommendation_score": 60
+            })
+
+        # Sort hardship options by recommendation score
+        comparison["hardship_options"].sort(key=lambda x: x.get("recommendation_score", 0), reverse=True)
+
+        return comparison
+

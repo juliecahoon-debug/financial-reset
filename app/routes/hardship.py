@@ -221,3 +221,37 @@ async def get_user_hardship_plans(
 
     return plans
 
+
+@router.get("/compare-all-options/{debt_id}")
+async def compare_all_hardship_options(
+        debt_id: int,
+        custom_payment: float = None,  # Optional custom payment
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    Compare hardship options with payment scenarios
+
+    Query Parameters:
+    - debt_id: ID of the debt (required)
+    - custom_payment (optional): Custom monthly payment amount
+
+    Returns:
+    - 4 preset payment scenarios (min, 2x, 3x, 4x minimum)
+    - Plus optional custom scenario if custom_payment provided
+    - Plus hardship options (settlement, forbearance, deferment)
+    """
+
+    debt = db.query(Debt).filter(
+        Debt.id == debt_id,
+        Debt.user_id == current_user.id
+    ).first()
+
+    if not debt:
+        raise HTTPException(status_code=404, detail="Debt not found")
+
+    comparison = HardshipService.compare_all_hardship_options(debt, custom_payment)
+
+    return comparison
+
+
