@@ -1,0 +1,1524 @@
+# Financial Reset API Documentation
+Version: v0.10.1
+Last Updated: May 7, 2026
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Authentication](#authentication)
+3. [Base URL & Environment](#base-url--environment)
+4. [Error Handling](#error-handling)
+5. [Endpoints by Category](#endpoints-by-category)
+6. [Common Use Cases](#common-use-cases)
+7. [Code Examples](#code-examples)
+8. [Best Practices](#best-practices)
+
+---
+
+## Overview
+
+The Financial Reset API helps users manage debt, plan hardship relief, and track spending. It provides endpoints for:
+- Creating and managing debt accounts
+- Comparing hardship options (forbearance, deferment, settlement)
+- Analyzing payment strategies (avalanche, snowball, balance transfer)
+- Tracking spending and budgets
+- Setting and monitoring financial goals
+
+**Base Features:**
+- Real-time debt analysis
+- Hardship plan recommendations
+- Payment strategy comparison
+- Financial health scoring
+- Spending analytics
+
+**Current Status:** Production Ready
+**API Version:** v0.10.1
+**Total Endpoints:** 41
+
+---
+
+## Authentication
+
+### API Key Authentication
+
+All requests require an API key passed in the Authorization header:
+
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+**Getting your API key:**
+1. Login to Financial Reset
+2. Go to Settings → API Keys
+3. Click "Generate New Key"
+4. Copy the key (only shown once!)
+5. Store safely (treat like password)
+
+**Example:**
+```bash
+curl -H "Authorization: Bearer sk_live_abc123def456" \
+  https://api.financialreset.com/v1/debts
+```
+
+### User Context
+
+All requests are scoped to the authenticated user. You can only access:
+- Your own debts
+- Your own hardship plans
+- Your own spending data
+- Your own goals
+
+### Invalid/Missing Auth
+
+If you don't provide a valid API key, you'll get:
+
+```json
+{
+  "error": "UNAUTHORIZED",
+  "message": "Missing or invalid authorization header",
+  "status": 401
+}
+```
+
+---
+
+## Base URL & Environment
+
+### Production
+```
+https://api.financialreset.com/v1
+```
+
+Use this for all production requests.
+
+### Staging (Testing)
+```
+https://staging-api.financialreset.com/v1
+```
+
+Use staging for testing before production. Data resets monthly in staging.
+
+### Rate Limiting
+
+- **Limit:** 1,000 requests/hour per API key
+- **Headers returned:**
+  - `X-RateLimit-Limit: 1000`
+  - `X-RateLimit-Remaining: 987`
+  - `X-RateLimit-Reset: 1715030400`
+
+If you exceed limits:
+
+```json
+{
+  "error": "RATE_LIMIT_EXCEEDED",
+  "message": "You have exceeded your rate limit. Try again in 1 hour.",
+  "status": 429
+}
+```
+
+Request higher limits by contacting support@financialreset.com
+
+---
+
+## Error Handling
+
+### Standard Error Format
+
+All errors follow this format:
+
+```json
+{
+  "error": "ERROR_CODE",
+  "message": "Human-readable message",
+  "status": 400,
+  "details": {
+    "field": "error_details"
+  },
+  "timestamp": "2026-05-07T12:34:56Z"
+}
+```
+
+### Common Error Codes
+
+| Code | Status | Meaning | Example |
+|------|--------|---------|---------|
+| INVALID_INPUT | 400 | Invalid request data | Missing required field |
+| UNAUTHORIZED | 401 | Invalid/missing auth | Invalid API key |
+| FORBIDDEN | 403 | Don't have permission | Accessing another user's debt |
+| NOT_FOUND | 404 | Resource doesn't exist | Debt ID doesn't exist |
+| VALIDATION_ERROR | 422 | Data format wrong | Amount must be number |
+| RATE_LIMIT_EXCEEDED | 429 | Too many requests | Exceeded 1,000/hour |
+| SERVER_ERROR | 500 | Our fault | Database error |
+| SERVICE_UNAVAILABLE | 503 | Maintenance | Scheduled downtime |
+
+---
+
+## Endpoints by Category
+
+### Authentication & Users (3 endpoints)
+
+#### POST /auth/register
+Create a new user account
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "password": "secure_password",
+  "full_name": "John Doe"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "user_id": 1,
+  "email": "user@example.com",
+  "full_name": "John Doe",
+  "api_key": "sk_live_abc123def456"
+}
+```
+
+---
+
+#### POST /auth/login
+Login and get API key
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "password": "secure_password"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "user_id": 1,
+  "email": "user@example.com",
+  "api_key": "sk_live_abc123def456"
+}
+```
+
+---
+
+#### GET /users/profile
+Get current user's profile
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "user_id": 1,
+  "email": "user@example.com",
+  "full_name": "John Doe",
+  "total_debts": 5,
+  "total_debt_balance": 25000,
+  "financial_health_score": 65
+}
+```
+
+---
+
+### Debts (8 endpoints)
+
+#### POST /debts
+Create a new debt account
+
+**Request:**
+```json
+{
+  "name": "Chase Credit Card",
+  "debt_type": "credit_card",
+  "balance": 2000,
+  "interest_rate": 22,
+  "minimum_payment": 50,
+  "creditor": "Chase"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "debt_id": 2,
+  "name": "Chase Credit Card",
+  "balance": 2000,
+  "interest_rate": 22,
+  "minimum_payment": 50,
+  "status": "active"
+}
+```
+
+---
+
+#### GET /debts
+List all user's debts
+
+**Authentication:** Required
+
+**Query Parameters:**
+- `status` (optional): "active", "paid_off"
+- `limit` (optional): Default 50, max 100
+- `offset` (optional): Default 0
+
+**Response (200 OK):**
+```json
+{
+  "debts": [
+    {
+      "debt_id": 1,
+      "name": "Chase Credit Card",
+      "balance": 2000,
+      "interest_rate": 22,
+      "minimum_payment": 50
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+#### GET /debts/{debt_id}
+Get details of a specific debt
+
+**Authentication:** Required
+
+**Path Parameters:**
+- `debt_id` (required): The debt ID
+
+**Response (200 OK):**
+```json
+{
+  "debt_id": 1,
+  "name": "Chase Credit Card",
+  "balance": 2000,
+  "interest_rate": 22,
+  "minimum_payment": 50,
+  "status": "active",
+  "creditor": "Chase",
+  "account_number": "****1234"
+}
+```
+
+---
+
+#### PUT /debts/{debt_id}
+Update debt information
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "balance": 1800,
+  "minimum_payment": 55
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "debt_id": 1,
+  "balance": 1800,
+  "minimum_payment": 55,
+  "updated_at": "2026-05-07T12:45:00Z"
+}
+```
+
+---
+
+#### DELETE /debts/{debt_id}
+Remove a debt account
+
+**Authentication:** Required
+
+**Response (204 No Content):** No body returned
+
+---
+
+#### GET /debts/stats
+Get summary statistics for all debts
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "total_debt": 25000,
+  "total_minimum_payment": 700,
+  "number_of_debts": 5,
+  "debt_by_type": {
+    "credit_card": 12000,
+    "personal_loan": 5000,
+    "auto_loan": 8000
+  }
+}
+```
+
+---
+
+#### POST /debts/bulk-upload
+Upload multiple debts via CSV file
+
+**Authentication:** Required
+
+**Request:** Multipart form-data with CSV file
+
+CSV Format:
+```
+debt_type,name,balance,interest_rate,minimum_payment
+credit_card,Chase,2000,22,50
+personal_loan,Marcus,5000,12,150
+```
+
+**Response (201 Created):**
+```json
+{
+  "imported": 2,
+  "failed": 0
+}
+```
+
+---
+
+#### GET /debts/search
+Search debts by name or creditor
+
+**Authentication:** Required
+
+**Query Parameters:**
+- `q` (required): Search query
+- `type` (optional): Filter by debt type
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {
+      "debt_id": 1,
+      "name": "Chase Credit Card",
+      "balance": 2000
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### Hardship Planning (7 endpoints)
+
+#### GET /hardship/options/{debt_id}
+Get available hardship options for a specific debt. Different debt types have different options available.
+
+**Authentication:** Required
+
+**Path Parameters:**
+- `debt_id` (required): The debt ID
+
+**Response (200 OK):**
+```json
+{
+  "debt_id": 1,
+  "debt_type": "credit_card",
+  "available_options": [
+    {
+      "option_type": "settlement",
+      "name": "Debt Settlement Negotiation",
+      "description": "Negotiate to pay lump sum (typically 40-60% of balance)",
+      "estimated_savings": 1000
+    }
+  ]
+}
+```
+
+---
+
+#### POST /hardship/recommend
+Get AI-recommended hardship plan based on your financial situation
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "debt_id": 1,
+  "monthly_cash_available": 75
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "debt_id": 1,
+  "recommendation": "forbearance",
+  "reason": "You're in a difficult financial situation. Forbearance provides temporary payment relief.",
+  "status": "DIFFICULT",
+  "savings_potential": 296.20
+}
+```
+
+The status can be: CRITICAL, DIFFICULT, MANAGEABLE, or STRONG
+
+---
+
+#### POST /hardship/calculate/deferment
+Calculate the impact of deferment on a student loan
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "debt_id": 3,
+  "deferment_months": 6
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "option_type": "deferment",
+  "deferment_months": 6,
+  "interest_accrued": 307.60,
+  "balance_after": 5307.60,
+  "total_cost": 307.60
+}
+```
+
+---
+
+#### POST /hardship/calculate/forbearance
+Calculate the impact of forbearance (reduced payments) on your debt
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "debt_id": 3,
+  "reduced_payment": 75,
+  "forbearance_months": 6
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "option_type": "forbearance",
+  "reduced_payment": 75,
+  "forbearance_months": 6,
+  "interest_accrued": 296.20,
+  "balance_after": 4846.20,
+  "savings_vs_minimum": 450
+}
+```
+
+---
+
+#### POST /hardship/calculate/settlement
+Calculate settlement option (lump sum negotiation)
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "debt_id": 2,
+  "settlement_percentage": 0.5
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "option_type": "settlement",
+  "settlement_percentage": 0.5,
+  "settlement_amount": 1000,
+  "amount_forgiven": 1000,
+  "tax_implications": 220,
+  "total_cost": 1000
+}
+```
+
+---
+
+#### POST /hardship/create
+Create and activate a hardship plan
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "debt_id": 3,
+  "plan_type": "forbearance",
+  "reason_for_hardship": "Job loss"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "plan_id": 5,
+  "debt_id": 3,
+  "plan_type": "forbearance",
+  "status": "active",
+  "created_at": "2026-05-07T12:34:56Z"
+}
+```
+
+---
+
+#### GET /hardship/user-plans
+Get all active hardship plans for the current user
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "plans": [
+    {
+      "plan_id": 5,
+      "debt_id": 3,
+      "plan_type": "forbearance",
+      "status": "active",
+      "created_at": "2026-05-07T12:34:56Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### Payment Strategies (6 endpoints)
+
+#### GET /strategies/avalanche
+Calculate debt payoff using the avalanche method (highest interest rate first)
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "strategy": "avalanche",
+  "description": "Pay highest interest debt first to save on interest",
+  "monthly_payment": 800,
+  "payoff_months": 45,
+  "total_interest": 15000,
+  "order": [
+    {
+      "debt_id": 1,
+      "name": "Credit Card",
+      "interest_rate": 22
+    },
+    {
+      "debt_id": 3,
+      "name": "Personal Loan",
+      "interest_rate": 12
+    }
+  ]
+}
+```
+
+---
+
+#### GET /strategies/snowball
+Calculate debt payoff using the snowball method (smallest balance first)
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "strategy": "snowball",
+  "description": "Pay smallest balance first for psychological wins",
+  "monthly_payment": 800,
+  "payoff_months": 48,
+  "total_interest": 18000
+}
+```
+
+---
+
+#### GET /strategies/balance-transfer
+Calculate savings from balance transfer to 0% APR card
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "strategy": "balance_transfer",
+  "description": "Move high-interest debt to 0% APR card",
+  "monthly_payment": 600,
+  "payoff_months": 24,
+  "total_interest": 0,
+  "transfer_fee": 50,
+  "recommended_card": "Citi Simplicity"
+}
+```
+
+---
+
+#### GET /strategies/consolidation
+Calculate savings from consolidating into a personal loan
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "strategy": "consolidation",
+  "description": "Consolidate multiple debts into single loan",
+  "monthly_payment": 550,
+  "payoff_months": 40,
+  "total_interest": 6000,
+  "consolidation_loan_rate": 10
+}
+```
+
+---
+
+#### POST /strategies/simulate
+Simulate a custom payment amount with a specific strategy
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "monthly_payment": 1000,
+  "strategy": "avalanche"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "strategy": "avalanche",
+  "monthly_payment": 1000,
+  "payoff_months": 28,
+  "total_interest": 5000,
+  "savings_vs_minimum": 45000
+}
+```
+
+---
+
+#### GET /strategies/comparison
+Compare all four strategies side-by-side
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "strategies": [
+    {
+      "name": "Avalanche",
+      "monthly_payment": 800,
+      "months": 45,
+      "interest": 15000
+    },
+    {
+      "name": "Snowball",
+      "monthly_payment": 800,
+      "months": 48,
+      "interest": 18000
+    },
+    {
+      "name": "Balance Transfer",
+      "monthly_payment": 600,
+      "months": 24,
+      "interest": 0
+    },
+    {
+      "name": "Consolidation",
+      "monthly_payment": 550,
+      "months": 40,
+      "interest": 6000
+    }
+  ]
+}
+```
+
+---
+
+### Budget & Spending (8 endpoints)
+
+#### POST /spending/import
+Upload spending transactions from a CSV file
+
+**Authentication:** Required
+
+**Request:** Multipart form-data with CSV file
+
+CSV Format:
+```
+date,category,amount,description
+2026-05-01,groceries,50,Whole Foods
+2026-05-02,utilities,120,Electric bill
+2026-05-03,dining,25,Restaurant
+```
+
+**Response (201 Created):**
+```json
+{
+  "imported": 3,
+  "failed": 0
+}
+```
+
+---
+
+#### GET /spending/transactions
+Get all spending transactions for a period
+
+**Authentication:** Required
+
+**Query Parameters:**
+- `month` (optional): Format "2026-05"
+- `category` (optional): Filter by category
+- `limit` (optional): Default 50, max 100
+
+**Response (200 OK):**
+```json
+{
+  "transactions": [
+    {
+      "id": 1,
+      "date": "2026-05-01",
+      "category": "groceries",
+      "amount": 50,
+      "description": "Whole Foods"
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+#### GET /spending/categories
+Get spending breakdown by category
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "categories": [
+    {
+      "name": "Groceries",
+      "total": 329.50,
+      "percentage": 51.50
+    },
+    {
+      "name": "Utilities",
+      "total": 120.00,
+      "percentage": 18.80
+    },
+    {
+      "name": "Transportation",
+      "total": 73.00,
+      "percentage": 11.40
+    }
+  ]
+}
+```
+
+---
+
+#### GET /spending/summary
+Get monthly spending summary
+
+**Authentication:** Required
+
+**Query Parameters:**
+- `month` (optional): Format "2026-05", defaults to current month
+
+**Response (200 OK):**
+```json
+{
+  "month": "2026-05",
+  "total_spending": 639.72,
+  "budget": 3200,
+  "status": "on_track",
+  "percentage_of_budget": 20
+}
+```
+
+---
+
+#### POST /budget/create
+Create a monthly budget with category allocations
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "total_budget": 3200,
+  "categories": {
+    "groceries": 500,
+    "utilities": 200,
+    "dining": 300
+  }
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "budget_id": 1,
+  "total_budget": 3200,
+  "created_at": "2026-05-07T12:34:56Z"
+}
+```
+
+---
+
+#### GET /budget/get
+Get the current budget
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "budget_id": 1,
+  "total_budget": 3200,
+  "categories": {
+    "groceries": 500,
+    "utilities": 200,
+    "dining": 300
+  },
+  "created_at": "2026-05-07T12:34:56Z"
+}
+```
+
+---
+
+#### PUT /budget/update
+Update the current budget
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "total_budget": 3500,
+  "categories": {
+    "groceries": 600
+  }
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "budget_id": 1,
+  "total_budget": 3500,
+  "updated_at": "2026-05-07T12:45:00Z"
+}
+```
+
+---
+
+#### DELETE /budget/delete
+Delete the current budget
+
+**Authentication:** Required
+
+**Response (204 No Content):** No body returned
+
+---
+
+### Financial Goals (4 endpoints)
+
+#### POST /goals/create
+Create a financial goal
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "name": "Emergency Fund",
+  "target_amount": 5000,
+  "current_amount": 1000,
+  "deadline": "2026-12-31"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "goal_id": 1,
+  "name": "Emergency Fund",
+  "target_amount": 5000,
+  "current_amount": 1000,
+  "progress_percentage": 20,
+  "created_at": "2026-05-07T12:34:56Z"
+}
+```
+
+---
+
+#### GET /goals
+List all financial goals
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "goals": [
+    {
+      "goal_id": 1,
+      "name": "Emergency Fund",
+      "target_amount": 5000,
+      "current_amount": 1000,
+      "progress_percentage": 20
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+#### PUT /goals/{goal_id}
+Update a financial goal
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "current_amount": 2000
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "goal_id": 1,
+  "current_amount": 2000,
+  "progress_percentage": 40,
+  "updated_at": "2026-05-07T12:45:00Z"
+}
+```
+
+---
+
+#### DELETE /goals/{goal_id}
+Delete a financial goal
+
+**Authentication:** Required
+
+**Response (204 No Content):** No body returned
+
+---
+
+### Dashboard & Analytics (3 endpoints)
+
+#### GET /dashboard/overview
+Get a high-level overview of your financial situation
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "total_debt": 25000,
+  "minimum_payment": 700,
+  "next_payment_date": "2026-05-15",
+  "financial_health_score": 65,
+  "debts_by_type": {
+    "credit_card": 12000,
+    "personal_loan": 5000,
+    "auto_loan": 8000
+  }
+}
+```
+
+---
+
+#### GET /dashboard/trends
+Get financial trends over time
+
+**Authentication:** Required
+
+**Query Parameters:**
+- `period` (optional): "3m", "6m", "12m" (default: "3m")
+
+**Response (200 OK):**
+```json
+{
+  "period": "3m",
+  "debt_reduction": 1500,
+  "spending_trend": "decreasing",
+  "monthly_data": [
+    {
+      "month": "2026-03",
+      "debt": 26500,
+      "spending": 3100
+    },
+    {
+      "month": "2026-04",
+      "debt": 26000,
+      "spending": 2450
+    },
+    {
+      "month": "2026-05",
+      "debt": 25000,
+      "spending": 639.72
+    }
+  ]
+}
+```
+
+---
+
+#### GET /dashboard/health-score
+Get detailed financial health score breakdown
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "overall_score": 65,
+  "debt_health": 75,
+  "budget_health": 67,
+  "savings_health": 67,
+  "goal_progress": 67,
+  "payment_history": 75,
+  "breakdown": {
+    "debt_to_income": "23%",
+    "utilization_ratio": "60%",
+    "emergency_fund_months": 1.8
+  }
+}
+```
+
+---
+
+### Compare Options (2 endpoints)
+
+#### GET /hardship/compare-all-options/{debt_id}
+Compare all hardship options and payment scenarios for a specific debt
+
+**Authentication:** Required
+
+**Path Parameters:**
+- `debt_id` (required): The debt ID
+
+**Query Parameters:**
+- `custom_payment` (optional): Custom monthly payment amount
+
+**Response (200 OK):**
+```json
+{
+  "debt_id": 2,
+  "payment_scenarios": [
+    {
+      "scenario_type": "minimum",
+      "monthly_payment": 50,
+      "months_to_payoff": 73,
+      "total_interest_paid": 1637.82
+    },
+    {
+      "scenario_type": "moderate",
+      "monthly_payment": 100,
+      "months_to_payoff": 26,
+      "total_interest_paid": 514.29
+    }
+  ],
+  "custom_scenario": null,
+  "hardship_options": [
+    {
+      "option_type": "settlement",
+      "lump_sum_required": 1000,
+      "credit_score_change": "-100 to -150 points"
+    }
+  ]
+}
+```
+
+---
+
+#### GET /strategies/compare-all
+Compare all payment strategies together
+
+**Authentication:** Required
+
+**Response (200 OK):**
+```json
+{
+  "strategies": [
+    {
+      "strategy": "avalanche",
+      "monthly_payment": 800,
+      "total_months": 45,
+      "total_interest": 15000
+    },
+    {
+      "strategy": "snowball",
+      "monthly_payment": 800,
+      "total_months": 48,
+      "total_interest": 18000
+    },
+    {
+      "strategy": "balance_transfer",
+      "monthly_payment": 600,
+      "total_months": 24,
+      "total_interest": 0
+    },
+    {
+      "strategy": "consolidation",
+      "monthly_payment": 550,
+      "total_months": 40,
+      "total_interest": 6000
+    }
+  ]
+}
+```
+
+---
+
+## Common Use Cases
+
+### Use Case 1: Get All Your Debts
+
+First, authenticate and then list your debts:
+
+```bash
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+  https://api.financialreset.com/v1/debts
+```
+
+**Response:**
+```json
+{
+  "debts": [
+    {
+      "debt_id": 1,
+      "name": "Chase Credit Card",
+      "balance": 2000,
+      "interest_rate": 22
+    },
+    {
+      "debt_id": 2,
+      "name": "Personal Loan",
+      "balance": 5000,
+      "interest_rate": 12
+    }
+  ]
+}
+```
+
+This shows all debts associated with your account.
+
+---
+
+### Use Case 2: Create and Explore a Hardship Plan
+
+Step 1: See what options are available for a debt:
+```bash
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+  https://api.financialreset.com/v1/hardship/options/1
+```
+
+Step 2: Get a recommendation:
+```bash
+curl -X POST \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "debt_id": 1,
+    "monthly_cash_available": 75
+  }' \
+  https://api.financialreset.com/v1/hardship/recommend
+```
+
+Step 3: Calculate the specific option:
+```bash
+curl -X POST \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "debt_id": 1,
+    "reduced_payment": 75,
+    "forbearance_months": 6
+  }' \
+  https://api.financialreset.com/v1/hardship/calculate/forbearance
+```
+
+Step 4: Create the plan:
+```bash
+curl -X POST \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "debt_id": 1,
+    "plan_type": "forbearance",
+    "reason_for_hardship": "Job loss"
+  }' \
+  https://api.financialreset.com/v1/hardship/create
+```
+
+---
+
+### Use Case 3: Compare All Payment Strategies
+
+Get all four strategies side-by-side to choose the best one:
+
+```bash
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+  https://api.financialreset.com/v1/strategies/comparison
+```
+
+This shows you avalanche, snowball, balance transfer, and consolidation all at once.
+
+---
+
+### Use Case 4: Import Your Spending Data
+
+Create a CSV file with your transactions:
+
+**spending.csv:**
+```
+date,category,amount,description
+2026-05-01,groceries,50,Whole Foods
+2026-05-02,utilities,120,Electric bill
+2026-05-03,dining,25,Restaurant
+```
+
+Then upload:
+```bash
+curl -X POST \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "file=@spending.csv" \
+  https://api.financialreset.com/v1/spending/import
+```
+
+---
+
+## Code Examples
+
+### JavaScript / Node.js
+
+```javascript
+const axios = require('axios');
+
+const apiKey = 'sk_live_your_api_key';
+const client = axios.create({
+  baseURL: 'https://api.financialreset.com/v1',
+  headers: { 'Authorization': `Bearer ${apiKey}` }
+});
+
+// Get all debts
+async function getDebts() {
+  try {
+    const response = await client.get('/debts');
+    console.log(response.data.debts);
+  } catch (error) {
+    console.error('Error fetching debts:', error.response.data);
+  }
+}
+
+// Create a new debt
+async function createDebt() {
+  try {
+    const response = await client.post('/debts', {
+      name: 'Chase Credit Card',
+      debt_type: 'credit_card',
+      balance: 2000,
+      interest_rate: 22,
+      minimum_payment: 50
+    });
+    console.log('Debt created:', response.data);
+  } catch (error) {
+    console.error('Error creating debt:', error.response.data);
+  }
+}
+
+// Get hardship options
+async function getHardshipOptions(debtId) {
+  try {
+    const response = await client.get(`/hardship/options/${debtId}`);
+    console.log('Available options:', response.data);
+  } catch (error) {
+    console.error('Error:', error.response.data);
+  }
+}
+
+// Run examples
+getDebts();
+```
+
+---
+
+### Python
+
+```python
+import requests
+import json
+
+API_KEY = 'sk_live_your_api_key'
+BASE_URL = 'https://api.financialreset.com/v1'
+
+headers = {
+    'Authorization': f'Bearer {API_KEY}',
+    'Content-Type': 'application/json'
+}
+
+# Get all debts
+def get_debts():
+    response = requests.get(f'{BASE_URL}/debts', headers=headers)
+    if response.status_code == 200:
+        print(json.dumps(response.json(), indent=2))
+    else:
+        print(f'Error: {response.status_code}', response.json())
+
+# Create a debt
+def create_debt():
+    data = {
+        'name': 'Chase Credit Card',
+        'debt_type': 'credit_card',
+        'balance': 2000,
+        'interest_rate': 22,
+        'minimum_payment': 50
+    }
+    response = requests.post(f'{BASE_URL}/debts', json=data, headers=headers)
+    if response.status_code == 201:
+        print('Debt created:', response.json())
+    else:
+        print('Error:', response.json())
+
+# Get hardship options
+def get_hardship_options(debt_id):
+    response = requests.get(f'{BASE_URL}/hardship/options/{debt_id}', headers=headers)
+    if response.status_code == 200:
+        print(json.dumps(response.json(), indent=2))
+    else:
+        print('Error:', response.json())
+
+# Run examples
+get_debts()
+```
+
+---
+
+### cURL
+
+```bash
+# Set your API key
+API_KEY="sk_live_your_api_key"
+BASE_URL="https://api.financialreset.com/v1"
+
+# Get all debts
+curl -H "Authorization: Bearer $API_KEY" \
+  $BASE_URL/debts
+
+# Create a debt
+curl -X POST \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Chase Credit Card",
+    "debt_type": "credit_card",
+    "balance": 2000,
+    "interest_rate": 22,
+    "minimum_payment": 50
+  }' \
+  $BASE_URL/debts
+
+# Get hardship options
+curl -H "Authorization: Bearer $API_KEY" \
+  $BASE_URL/hardship/options/1
+
+# Get financial dashboard
+curl -H "Authorization: Bearer $API_KEY" \
+  $BASE_URL/dashboard/overview
+```
+
+---
+
+## Best Practices
+
+### Performance
+
+1. **Cache responses when possible** - Debt list doesn't change every second, so cache for 5-60 minutes
+2. **Use pagination** - Don't request all 1000 transactions at once. Use `limit` and `offset` parameters
+3. **Batch requests** - If creating multiple debts, do it efficiently
+4. **Monitor rate limits** - Check `X-RateLimit-Remaining` header to stay under 1,000/hour
+
+### Error Handling
+
+Always check the status code and handle errors gracefully:
+
+```javascript
+try {
+  const response = await client.get('/debts');
+  return response.data;
+} catch (error) {
+  if (error.response.status === 401) {
+    console.error('Invalid API key - re-authenticate');
+  } else if (error.response.status === 429) {
+    console.error('Rate limited - wait before retrying');
+  } else if (error.response.status === 500) {
+    console.error('Server error - retry later');
+  }
+  throw error;
+}
+```
+
+### Security
+
+1. **Never hardcode API keys** - Use environment variables
+   ```bash
+   export FINANCIAL_RESET_API_KEY=sk_live_your_key
+   ```
+
+2. **Rotate keys regularly** - Generate new keys monthly and revoke old ones
+
+3. **Only request needed data** - Filter by month, category, or status instead of downloading everything
+
+4. **Use HTTPS only** - Always use https://, never http://
+
+### Testing
+
+1. **Use staging environment** before going to production
+   ```
+   https://staging-api.financialreset.com/v1
+   ```
+
+2. **Test error cases** - Try invalid debt IDs, missing auth, bad data formats
+
+3. **Load test** - Simulate expected traffic before launching
+
+4. **Test edge cases** - Zero balance, very high interest, multiple hardship plans
+
+---
+
+## Support & Resources
+
+**Documentation:** https://docs.financialreset.com
+**API Status:** https://status.financialreset.com
+**Support Email:** support@financialreset.com
+**Community:** https://community.financialreset.com
+
+---
+
+**Version:** v0.10.1
+**Last Updated:** May 7, 2026
+**Status:** Production Ready
+**Total Endpoints:** 41
