@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.models.debt import Debt, HardshipPlan
@@ -24,8 +25,39 @@ async def get_hardship_options(
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """Get available hardship relief options for a debt"""
+    """
+    Get available hardship relief options for a debt.
 
+    ⚠️  IMPORTANT DISCLAIMERS & LEGAL NOTICES:
+
+    EDUCATIONAL PURPOSE ONLY:
+    - This information is provided for EDUCATIONAL purposes only
+    - This is NOT legal or financial advice
+    - Consult with a lawyer or financial advisor for your specific situation
+
+    CREDITOR VARIATIONS:
+    - Actual programs vary SIGNIFICANTLY by creditor and situation
+    - Terms, conditions, requirements, and availability are subject to change
+    - Contact your creditor DIRECTLY to confirm eligibility and terms
+
+    NO GUARANTEE:
+    - Offering these options does NOT guarantee approval
+    - Your creditor may deny your request for hardship assistance
+
+    CREDIT IMPACT:
+    - Some hardship programs (especially settlement) severely impact credit score
+    - Forbearance/deferment may extend your payoff timeline
+    - Default/charge-off will damage your credit for 7 years
+
+    TAX IMPLICATIONS - VERY IMPORTANT:
+    - Forgiven debt may be considered TAXABLE INCOME
+    - Consult a CPA or tax professional BEFORE settling
+
+    This API returns RECOMMENDATIONS based on your situation, but the actual
+    available programs depend on YOUR specific creditor's policies.
+    """
+
+    # VERIFY DEBT EXISTS AND BELONGS TO USER
     debt = db.query(Debt).filter(
         Debt.id == debt_id,
         Debt.user_id == current_user.id
@@ -34,8 +66,54 @@ async def get_hardship_options(
     if not debt:
         raise HTTPException(status_code=404, detail="Debt not found")
 
+    # GET HARDSHIP OPTIONS FROM YOUR EXISTING SERVICE
     options = HardshipService.get_hardship_options(debt)
-    return options
+
+    # BUILD ENHANCED RESPONSE WITH DISCLAIMERS
+    response = {
+        "debt_id": debt_id,
+        "debt_name": debt.name,
+        "debt_type": debt.debt_type,
+        "creditor": debt.creditor,
+        "current_balance": float(debt.balance),
+        "interest_rate": float(debt.interest_rate) if debt.interest_rate else None,
+        "minimum_payment": float(debt.minimum_payment) if hasattr(debt, 'minimum_payment') else None,
+        "status": debt.status,
+        "days_late": getattr(debt, 'days_late', 0),
+
+        "available_options": options,
+
+        "disclaimers": {
+            "information_type": "EDUCATIONAL INFORMATION ONLY",
+            "not_legal_advice": "This is not legal or financial advice. Consult a lawyer or financial advisor.",
+            "not_lender_decision": "This information does not represent a creditor's actual decision.",
+            "creditor_variation": "These are POTENTIAL options. Your creditor's actual programs may differ.",
+            "no_guarantee": "These options are not guaranteed. Your creditor may deny your request.",
+            "must_contact_creditor": "You MUST contact your creditor directly to confirm eligibility.",
+            "tax_warning": "Forgiven debt may be considered taxable income. Consult a CPA before settling.",
+            "credit_impact": "These programs may negatively impact your credit score.",
+            "data_currency": "Creditor policies change. Verify all terms with creditor before accepting.",
+            "settlement_critical": "Settlement severely damages credit for 7 years.",
+        },
+
+        "recommended_next_steps": get_recommended_steps(debt),
+        "creditor_contact": get_creditor_contact(debt),
+        "warnings": get_situation_warnings(debt),
+
+        "resources": {
+            "credit_counseling": {
+                "organization": "NFCC",
+                "phone": "1-800-388-2227",
+                "website": "www.nfcc.org",
+                "services": "FREE credit counseling"
+            }
+        },
+
+        "timestamp": datetime.utcnow().isoformat(),
+        "note": "Verify with your creditor. Policies change frequently.",
+    }
+
+    return response
 
 
 @router.post("/recommend")
@@ -255,3 +333,105 @@ async def compare_all_hardship_options(
     return comparison
 
 
+def get_recommended_steps(debt: Debt) -> list:
+    """Get recommended action steps."""
+    return [
+        {
+            "step": 1,
+            "action": "Review the hardship options above",
+            "why": "Understand what programs might be available",
+            "time": "5-10 minutes"
+        },
+        {
+            "step": 2,
+            "action": f"Contact {debt.creditor}'s hardship department",
+            "why": "Confirm which programs apply to YOUR account",
+            "tip": "Say: 'I'm experiencing financial hardship and would like to discuss payment relief options'",
+            "time": "15-30 minutes"
+        },
+        {
+            "step": 3,
+            "action": "Ask about EACH option specifically",
+            "why": "Get detailed information",
+            "time": "20-40 minutes"
+        },
+        {
+            "step": 4,
+            "action": "Get everything in WRITING",
+            "why": "Protect yourself. Verbal agreements don't protect you.",
+            "critical": "DO NOT pay until you have written agreement",
+            "time": "15-30 minutes"
+        },
+        {
+            "step": 5,
+            "action": "Understand the FULL impact",
+            "why": "Know how this affects your finances",
+            "time": "30-60 minutes"
+        },
+        {
+            "step": 6,
+            "action": "Talk to a credit counselor (optional)",
+            "where": "Call NFCC at 1-800-388-2227 (FREE)",
+            "time": "60 minutes"
+        },
+        {
+            "step": 7,
+            "action": "Make your decision and start payments",
+            "why": "Once you understand everything, move forward",
+            "time": "Ongoing"
+        }
+    ]
+
+
+def get_creditor_contact(debt: Debt) -> dict:
+    """Get creditor contact information."""
+    creditor_info = {
+        "Chase": {"phone": "1-800-945-9060", "department": "Hardship Program"},
+        "Capital One": {"phone": "1-877-383-4802", "department": "Hardship Department"},
+        "American Express": {"phone": "1-800-567-1234", "department": "Hardship / Customer Service"},
+        "Discover": {"phone": "1-800-347-2683", "department": "Customer Service"},
+    }
+
+    known = creditor_info.get(debt.creditor)
+
+    if known:
+        return {
+            "creditor_name": debt.creditor,
+            "phone": known["phone"],
+            "department": known["department"],
+            "what_to_say": "I'm experiencing financial hardship and would like to discuss payment relief options.",
+            "have_ready": ["Account number", "SSN", "Brief hardship explanation", "Income info"]
+        }
+    else:
+        return {
+            "creditor_name": debt.creditor,
+            "phone": "See back of your card",
+            "department": "Hardship Department",
+            "note": f"Search '{debt.creditor} hardship program' online"
+        }
+
+
+def get_situation_warnings(debt: Debt) -> list:
+    """Generate warnings based on debt situation."""
+    warnings = []
+    days_late = getattr(debt, 'days_late', 0)
+
+    if days_late is None or days_late == 0:
+        warnings.append({"severity": "LOW", "message": "Account is current. Act proactively if struggling."})
+    elif days_late < 30:
+        warnings.append({"severity": "MEDIUM", "message": "Account approaching 30 days late. Act quickly."})
+    elif days_late < 60:
+        warnings.append({"severity": "HIGH", "message": "Account 30+ days late. Contact creditor immediately."})
+    elif days_late < 120:
+        warnings.append({"severity": "CRITICAL", "message": "Charge-off imminent. Contact creditor today."})
+    else:
+        warnings.append({"severity": "CRITICAL", "message": "Account likely charged off. Settlement still possible."})
+
+    if debt.interest_rate and debt.interest_rate > 20:
+        warnings.append({"severity": "MEDIUM",
+                         "message": f"High interest rate ({debt.interest_rate}%). Settlement may save money."})
+
+    if debt.balance and debt.balance > 5000:
+        warnings.append({"severity": "MEDIUM", "message": "Large balance. Better negotiating power."})
+
+    return warnings
