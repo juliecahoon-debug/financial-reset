@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.models.debt import Debt, HardshipPlan
@@ -10,11 +9,14 @@ from app.schemas.hardship import (
     HardshipPlanCreate, HardshipPlanResponse, HardshipPlanOption
 )
 from pydantic import BaseModel
+from datetime import datetime
+
 
 class CreateHardshipPlanRequest(BaseModel):
     debt_id: int
     plan_type: str
     reason_for_hardship: str
+
 
 router = APIRouter(prefix="/hardship", tags=["hardship"])
 
@@ -68,6 +70,28 @@ async def get_hardship_options(
 
     # GET HARDSHIP OPTIONS FROM YOUR EXISTING SERVICE
     options = HardshipService.get_hardship_options(debt)
+
+    # FILTER OPTIONS BY DEBT TYPE (Remove non-applicable hardship programs)
+    if debt.debt_type == "credit_card":
+        # Credit cards: Only settlement, forbearance, hardship program
+        # REMOVE: deferment (not applicable to credit cards)
+        options = [opt for opt in options if opt.get("plan_type") in ["settlement", "forbearance", "hardship_program"]]
+
+    elif debt.debt_type == "student_loan":
+        # Student loans: All options available
+        pass
+
+    elif debt.debt_type == "auto_loan":
+        # Auto loans: settlement, forbearance, deferment
+        options = [opt for opt in options if opt.get("plan_type") in ["settlement", "forbearance", "deferment"]]
+
+    elif debt.debt_type == "personal_loan":
+        # Personal loans: Usually just settlement and forbearance
+        options = [opt for opt in options if opt.get("plan_type") in ["settlement", "forbearance"]]
+
+    # FILTER OUT SETTLEMENT FOR CURRENT ACCOUNTS (0 days late)
+    if getattr(debt, 'days_late', 0) == 0:
+        options = [opt for opt in options if opt.get("plan_type") != "settlement"]
 
     # BUILD ENHANCED RESPONSE WITH DISCLAIMERS
     response = {
@@ -123,7 +147,22 @@ async def get_hardship_recommendation(
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """Get recommended hardship plan based on user situation"""
+    """
+    Get recommended hardship plan based on user situation.
+
+    ⚠️  IMPORTANT DISCLAIMERS:
+
+    RECOMMENDATION IS NOT A GUARANTEE:
+    - This recommendation is based on your financial situation
+    - Your creditor may recommend a different option
+    - This is NOT a promise that the creditor will approve this plan
+    - Creditors have final say on which programs they offer
+
+    EDUCATIONAL INFORMATION:
+    - This is an estimate based on your data
+    - Not legal or financial advice
+    - Consult a financial advisor for your specific situation
+    """
 
     debt = db.query(Debt).filter(
         Debt.id == debt_id,
@@ -139,7 +178,18 @@ async def get_hardship_recommendation(
         monthly_cash_available
     )
 
-    return recommendation
+    enhanced_recommendation = {
+        **recommendation,
+        "disclaimers": {
+            "recommendation_type": "EDUCATIONAL RECOMMENDATION ONLY",
+            "not_a_promise": "This recommendation is not a guarantee of approval",
+            "creditor_discretion": "Your creditor makes the final decision",
+        },
+        "warning": "Contact your creditor to confirm this recommendation",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    return enhanced_recommendation
 
 
 @router.post("/calculate/deferment")
@@ -149,7 +199,26 @@ async def calculate_deferment(
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """Calculate deferment impact"""
+    """
+    Calculate deferment impact - Temporary pause on payments.
+
+    ⚠️  DEFERMENT INFORMATION:
+
+    WHAT IS DEFERMENT:
+    - Temporary PAUSE on payments
+    - Interest typically continues to accrue
+    - Best for TEMPORARY hardship
+
+    PRIMARY USE:
+    - Most common for STUDENT LOANS
+    - Less common for credit cards
+    - Rarely available for auto loans
+
+    IMPORTANT NOTES:
+    - Interest continues to accrue (usually)
+    - Loan term extends (you pay longer overall)
+    - You'll owe more total (interest adds up)
+    """
 
     debt = db.query(Debt).filter(
         Debt.id == debt_id,
@@ -160,7 +229,23 @@ async def calculate_deferment(
         raise HTTPException(status_code=404, detail="Debt not found")
 
     impact = HardshipService.calculate_deferment_impact(debt, deferment_months)
-    return impact
+
+    enhanced_impact = {
+        **impact,
+        "deferment_info": {
+            "what_is_deferment": "Temporary complete pause on payments",
+            "duration": f"{deferment_months} months",
+            "interest_continues": "Interest typically accrues (ask your creditor)",
+        },
+        "key_questions": [
+            "Is deferment available for my debt type?",
+            "Will interest accrue during deferment?",
+            "What happens when deferment ends?"
+        ],
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    return enhanced_impact
 
 
 @router.post("/calculate/forbearance")
@@ -171,7 +256,26 @@ async def calculate_forbearance(
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """Calculate forbearance impact"""
+    """
+    Calculate forbearance impact - Temporary payment reduction.
+
+    ⚠️  FORBEARANCE INFORMATION:
+
+    WHAT IS FORBEARANCE:
+    - Temporary pause or reduction in payments
+    - Your account remains in good standing (usually)
+    - Interest typically continues to accrue
+
+    HOW FORBEARANCE WORKS:
+    - You pay reduced amount for agreed period
+    - After forbearance ends, normal payments resume
+    - Interest accrues during forbearance period
+
+    CREDIT IMPACT:
+    - May be reported as "deferred" or "forbearance"
+    - Usually less damaging than settlement
+    - Usually less damaging than delinquency
+    """
 
     debt = db.query(Debt).filter(
         Debt.id == debt_id,
@@ -186,7 +290,24 @@ async def calculate_forbearance(
         reduced_payment,
         forbearance_months
     )
-    return impact
+
+    enhanced_impact = {
+        **impact,
+        "forbearance_info": {
+            "what_is_forbearance": "Temporary pause or reduction in payments",
+            "duration": f"{forbearance_months} months",
+            "reduced_payment": f"${reduced_payment:,.2f}/month",
+            "interest_continues": "Interest typically accrues during forbearance",
+        },
+        "key_questions": [
+            "Will interest accrue during forbearance?",
+            "How will you report forbearance to credit bureaus?",
+            "What happens when forbearance ends?"
+        ],
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    return enhanced_impact
 
 
 @router.post("/calculate/settlement")
@@ -196,7 +317,34 @@ async def calculate_settlement(
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """Calculate settlement impact"""
+    """
+    Calculate settlement impact - WARNING: SEVERE CONSEQUENCES.
+
+    ⚠️  CRITICAL SETTLEMENT WARNINGS:
+
+    CREDIT IMPACT - VERY SEVERE:
+    - Settlement will cause a DROP of 100-150+ points IMMEDIATELY
+    - "Settled for less than full balance" stays on credit report 7 YEARS
+    - Your credit score will be significantly impacted
+    - Future borrowing will be more expensive
+
+    TAX IMPLICATIONS - YOU MAY OWE TAXES:
+    - Forgiven debt is considered TAXABLE INCOME
+    - You will receive a Form 1099-C from creditor
+    - This could result in $200-300 tax bill (or more)
+    - MUST consult a CPA BEFORE settling
+
+    CREDITOR NOT OBLIGATED:
+    - Your creditor does NOT have to settle
+    - Settlement is a NEGOTIATION, not a guarantee
+    - Creditor can refuse your settlement offer
+
+    ONLY AS ABSOLUTE LAST RESORT:
+    - Try ALL other options first
+    - Settlement should be LAST option after others fail
+    - Only if you understand the 7-year credit impact
+    - Only if you've consulted with a tax professional
+    """
 
     debt = db.query(Debt).filter(
         Debt.id == debt_id,
@@ -207,7 +355,23 @@ async def calculate_settlement(
         raise HTTPException(status_code=404, detail="Debt not found")
 
     impact = HardshipService.calculate_settlement_impact(debt, settlement_percentage)
-    return impact
+
+    enhanced_impact = {
+        **impact,
+        "settlement_disclaimers": {
+            "information_type": "SETTLEMENT CALCULATION ONLY",
+            "does_not_include_taxes": "This calculation does NOT include tax consequences",
+            "creditor_not_obligated": "Your creditor is NOT obligated to settle",
+            "settlement_not_guaranteed": "You may not get this settlement percentage",
+            "tax_professional_required": "You MUST consult a CPA before settling",
+            "last_resort_only": "Settlement should be considered only after all other options fail",
+        },
+        "tax_warning": f"Forgiven debt of ${debt.balance * (1 - settlement_percentage):,.2f} may be taxable income.",
+        "credit_impact_warning": "Credit score will drop 100-150+ points. Takes 3-5 years to recover.",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    return enhanced_impact
 
 
 @router.post("/create")
@@ -216,7 +380,26 @@ async def create_hardship_plan(
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db)
 ):
-    """Create a hardship plan for a debt"""
+    """
+    Create a hardship plan for a debt - Get written confirmation.
+
+    ⚠️  HARDSHIP PLAN CREATION IMPORTANT NOTES:
+
+    BEFORE YOU PROCEED:
+    - This creates a hardship plan in our system
+    - This does NOT contact your creditor
+    - This does NOT bind your creditor to anything
+    - You MUST contact your creditor separately
+
+    NEXT STEP (CRITICAL):
+    - Contact your creditor directly
+    - Ask for written confirmation of terms
+    - Do NOT make any payments without written agreement
+
+    WRITTEN AGREEMENT REQUIRED:
+    - You MUST get written confirmation from creditor
+    - Verbal agreements do NOT protect you
+    """
 
     debt_id = request.debt_id
     plan_type = request.plan_type
@@ -283,7 +466,25 @@ async def create_hardship_plan(
     db.commit()
     db.refresh(hardship_plan)
 
-    return hardship_plan
+    response = {
+        "plan_id": hardship_plan.id,
+        "debt_id": hardship_plan.debt_id,
+        "plan_type": hardship_plan.plan_type,
+        "status": hardship_plan.status,
+        "plan_summary": {
+            "debt_name": debt.name,
+            "creditor": debt.creditor,
+            "current_balance": float(debt.balance),
+        },
+        "critical_warnings": [
+            "⚠️  This plan is NOT approved by your creditor yet",
+            "⚠️  You MUST contact your creditor to confirm",
+            "⚠️  Do NOT make any payments without written agreement",
+        ],
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    return response
 
 
 @router.get("/user-plans")
@@ -291,47 +492,53 @@ async def get_user_hardship_plans(
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
-    """Get all hardship plans for current user"""
+    """
+    Get all hardship plans for current user.
+
+    ⚠️  PLAN STATUS INFORMATION:
+
+    VERIFY WITH CREDITOR:
+    - Your status here is what you've recorded
+    - Creditor's system may show different status
+    - Always verify current status with creditor
+
+    CHECK YOUR STATEMENTS:
+    - Review your monthly bills carefully
+    - Verify payments are being credited correctly
+    - Confirm plan terms match your agreement
+    """
 
     plans = db.query(HardshipPlan).filter(
         HardshipPlan.user_id == current_user.id
     ).all()
 
-    return plans
+    enhanced_plans = []
+
+    for plan in plans:
+        debt = db.query(Debt).filter(Debt.id == plan.debt_id).first()
+
+        enhanced_plan = {
+            "plan_id": plan.id,
+            "debt_id": plan.debt_id,
+            "debt_name": debt.name if debt else "Unknown",
+            "creditor": debt.creditor if debt else "Unknown",
+            "plan_type": plan.plan_type,
+            "status": plan.status,
+            "created_at": plan.created_at.isoformat() if hasattr(plan.created_at, 'isoformat') else str(
+                plan.created_at),
+            "verification_reminders": [
+                "Verify payments credited correctly",
+                "Confirm no late fees were charged",
+                "Check that plan is reported correctly to credit bureaus",
+            ]
+        }
+
+        enhanced_plans.append(enhanced_plan)
+
+    return enhanced_plans
 
 
-@router.get("/compare-all-options/{debt_id}")
-async def compare_all_hardship_options(
-        debt_id: int,
-        custom_payment: float = None,  # Optional custom payment
-        current_user: User = Depends(get_current_user),
-        db: Session = Depends(get_db)
-):
-    """
-    Compare hardship options with payment scenarios
-
-    Query Parameters:
-    - debt_id: ID of the debt (required)
-    - custom_payment (optional): Custom monthly payment amount
-
-    Returns:
-    - 4 preset payment scenarios (min, 2x, 3x, 4x minimum)
-    - Plus optional custom scenario if custom_payment provided
-    - Plus hardship options (settlement, forbearance, deferment)
-    """
-
-    debt = db.query(Debt).filter(
-        Debt.id == debt_id,
-        Debt.user_id == current_user.id
-    ).first()
-
-    if not debt:
-        raise HTTPException(status_code=404, detail="Debt not found")
-
-    comparison = HardshipService.compare_all_hardship_options(debt, custom_payment)
-
-    return comparison
-
+# ===== HELPER FUNCTIONS =====
 
 def get_recommended_steps(debt: Debt) -> list:
     """Get recommended action steps."""
@@ -340,51 +547,42 @@ def get_recommended_steps(debt: Debt) -> list:
             "step": 1,
             "action": "Review the hardship options above",
             "why": "Understand what programs might be available",
-            "time": "5-10 minutes"
         },
         {
             "step": 2,
             "action": f"Contact {debt.creditor}'s hardship department",
             "why": "Confirm which programs apply to YOUR account",
-            "tip": "Say: 'I'm experiencing financial hardship and would like to discuss payment relief options'",
-            "time": "15-30 minutes"
         },
         {
             "step": 3,
             "action": "Ask about EACH option specifically",
             "why": "Get detailed information",
-            "time": "20-40 minutes"
         },
         {
             "step": 4,
             "action": "Get everything in WRITING",
-            "why": "Protect yourself. Verbal agreements don't protect you.",
-            "critical": "DO NOT pay until you have written agreement",
-            "time": "15-30 minutes"
+            "why": "Protect yourself",
         },
         {
             "step": 5,
             "action": "Understand the FULL impact",
             "why": "Know how this affects your finances",
-            "time": "30-60 minutes"
         },
         {
             "step": 6,
             "action": "Talk to a credit counselor (optional)",
             "where": "Call NFCC at 1-800-388-2227 (FREE)",
-            "time": "60 minutes"
         },
         {
             "step": 7,
-            "action": "Make your decision and start payments",
+            "action": "Make your decision",
             "why": "Once you understand everything, move forward",
-            "time": "Ongoing"
         }
     ]
 
 
 def get_creditor_contact(debt: Debt) -> dict:
-    """Get creditor contact information."""
+    """Get creditor contact information and debt-type specific resources."""
     creditor_info = {
         "Chase": {"phone": "1-800-945-9060", "department": "Hardship Program"},
         "Capital One": {"phone": "1-877-383-4802", "department": "Hardship Department"},
@@ -394,21 +592,194 @@ def get_creditor_contact(debt: Debt) -> dict:
 
     known = creditor_info.get(debt.creditor)
 
-    if known:
-        return {
-            "creditor_name": debt.creditor,
-            "phone": known["phone"],
-            "department": known["department"],
-            "what_to_say": "I'm experiencing financial hardship and would like to discuss payment relief options.",
-            "have_ready": ["Account number", "SSN", "Brief hardship explanation", "Income info"]
+    base_contact = {
+        "creditor_name": debt.creditor,
+        "phone": known["phone"] if known else "See back of your card",
+        "department": known["department"] if known else "Hardship Department",
+        "what_to_say": "I'm experiencing financial hardship and would like to discuss payment relief options.",
+    }
+
+    # ADD DEBT-TYPE SPECIFIC RESOURCES
+    if debt.debt_type == "credit_card":
+        base_contact["resources"] = {
+            "primary": {
+                "organization": "Contact your creditor FIRST",
+                "why": "Creditors often have in-house hardship programs better than third-party options"
+            },
+            "if_creditor_refuses": {
+                "organization": "NFCC - National Foundation for Credit Counseling",
+                "phone": "1-800-388-2227",
+                "website": "www.nfcc.org",
+                "services": ["FREE credit counseling", "Debt Management Plan (DMP)"],
+                "cost": "FREE counseling, $25-50/month for DMP",
+                "critical_warning": "⚠️ IMPORTANT: If you enroll in a DMP, your creditor will CLOSE this credit card account and revoke your card. You won't be able to use it anymore.",
+                "dmp_consequences": [
+                    "❌ Credit card account will be CLOSED",
+                    "❌ Card will be revoked (can't use it)",
+                    "❌ Account closure damages your credit score further",
+                    "❌ 'In DMP' notation stays on credit report for 3-5 years",
+                    "✅ But: Lowers your overall debt and interest payments"
+                ],
+                "when_to_use_dmp": "Only if creditor won't work with you directly"
+            }
         }
+
+    elif debt.debt_type == "personal_loan":
+        base_contact["resources"] = {
+            "primary": {
+                "organization": "Contact your lender FIRST",
+                "why": "Most lenders will work directly with you on payment plans"
+            },
+            "if_lender_refuses": {
+                "organization": "NFCC - National Foundation for Credit Counseling",
+                "phone": "1-800-388-2227",
+                "website": "www.nfcc.org",
+                "services": ["FREE credit counseling", "Debt Management Plan (DMP)"],
+                "cost": "FREE counseling, $25-50/month for DMP",
+                "dmp_consequences": [
+                    "⚠️ Account will be marked 'In DMP' on credit report",
+                    "⚠️ May impact your credit score (typically 20-50 point hit)",
+                    "✅ But: Lender stays at negotiating table",
+                    "✅ Account usually remains open (unlike credit cards)",
+                    "✅ Lowers overall interest and payments"
+                ],
+                "when_to_use_dmp": "When lender won't negotiate directly with you"
+            }
+        }
+
+    elif debt.debt_type == "auto_loan":
+        base_contact["resources"] = {
+            "primary": {
+                "organization": "Contact your lender DIRECTLY",
+                "why": "Auto loans are DIFFERENT - your car can be repossessed",
+                "critical": "⚠️ WARNING: Do NOT let auto loans go to collections or DMP"
+            },
+            "recommended_approach": {
+                "step_1": "Call your lender immediately",
+                "step_2": "Ask about forbearance, deferment, or payment modification",
+                "step_3": "Explain your hardship (job loss, medical, etc)",
+                "step_4": "Get written agreement BEFORE missing any payments"
+            },
+            "why_not_dmp": [
+                "❌ Auto lenders rarely participate in DMP",
+                "❌ Car can be REPOSSESSED even with DMP agreement",
+                "❌ Repossession damages credit severely",
+                "❌ You lose transportation and way to earn income"
+            ],
+            "alternatives": {
+                "option_1": "Forbearance - Pause or reduce payments temporarily",
+                "option_2": "Refinance - If you have decent credit, refinance to lower payment",
+                "option_3": "Sell the car - If upside down on loan, consider selling and paying difference"
+            },
+            "last_resort": {
+                "organization": "Bankruptcy attorney",
+                "when": "Only if you cannot reach lender AND cannot afford car",
+                "why": "Chapter 7 or 13 can protect your car while restructuring debt"
+            }
+        }
+
+    elif debt.debt_type == "student_loan":
+        base_contact["resources"] = {
+            "important_note": "Federal vs Private student loans have VERY different options",
+            "federal_loans": {
+                "what_they_are": "Loans from US Department of Education (Stafford, PLUS, etc)",
+                "best_option": "Income-Driven Repayment Plans (government program)",
+                "why_better_than_dmp": [
+                    "✅ FREE (no DMP fees)",
+                    "✅ Official government program",
+                    "✅ Better credit protection",
+                    "✅ Eligible for Public Service Loan Forgiveness (PSLF) if applicable",
+                    "✅ Interest accrual may be waived (depending on plan)"
+                ],
+                "options": [
+                    "Income-Based Repayment (IBR)",
+                    "Pay As You Earn (PAYE)",
+                    "Revised Pay As You Earn (REPAYE)",
+                    "Income-Contingent Repayment (ICR)"
+                ],
+                "how_to_apply": "Visit studentaid.gov or call 1-800-4-FED-AID (1-800-433-3243)",
+                "do_not_use_dmp": "For federal loans, NFCC/DMP is NOT the best path"
+            },
+            "private_student_loans": {
+                "what_they_are": "Loans from banks, credit unions, or private lenders",
+                "best_option": "Contact lender directly for forbearance/deferment",
+                "if_lender_refuses": {
+                    "organization": "NFCC - National Foundation for Credit Counseling",
+                    "phone": "1-800-388-2227",
+                    "website": "www.nfcc.org",
+                    "can_help_with": "Negotiating with private lenders"
+                },
+                "dmp_for_private": [
+                    "⚠️ NFCC can help with private student loans",
+                    "⚠️ DMP will mark account 'In DMP' on credit report",
+                    "⚠️ Lender may refuse to participate",
+                    "✅ But: If they accept, can reduce monthly payments"
+                ]
+            }
+        }
+
+    elif debt.debt_type == "mortgage":
+        base_contact["resources"] = {
+            "primary": {
+                "organization": "Contact your mortgage lender DIRECTLY",
+                "why": "Mortgages have special government programs designed for hardship"
+            },
+            "government_programs": {
+                "hamp": {
+                    "name": "Home Affordable Modification Program (HAMP)",
+                    "what_it_does": "Government-backed loan modification program",
+                    "benefits": [
+                        "Lower monthly payment",
+                        "Extended loan term",
+                        "Reduced interest rate",
+                        "May forgive some principal"
+                    ],
+                    "website": "www.makinghomeaffordable.gov",
+                    "phone": "1-888-995-HOPE (1-888-995-4673)"
+                },
+                "hmpa": {
+                    "name": "Home Mortgage Protection Act",
+                    "what_it_does": "Protects homeowners in hardship",
+                    "protections": [
+                        "Foreclosure protections",
+                        "Right to loan modification",
+                        "Right to forbearance"
+                    ]
+                }
+            },
+            "do_not_use_dmp": [
+                "❌ Standard DMP NOT appropriate for mortgages",
+                "❌ Lenders want to work directly with you",
+                "❌ Government programs are better",
+                "❌ NFCC cannot help modify mortgages"
+            ],
+            "steps": [
+                "Step 1: Contact your lender's loss mitigation department",
+                "Step 2: Ask about loan modification programs",
+                "Step 3: Ask about HAMP eligibility",
+                "Step 4: Get written loan modification agreement",
+                "Step 5: If lender refuses, contact HUD: 1-800-569-4287"
+            ],
+            "last_resort": {
+                "organization": "HUD Housing Counselor (FREE)",
+                "phone": "1-800-569-4287",
+                "website": "www.hud.gov",
+                "why": "Independent counselor to advocate for you against lender"
+            }
+        }
+
     else:
-        return {
-            "creditor_name": debt.creditor,
-            "phone": "See back of your card",
-            "department": "Hardship Department",
-            "note": f"Search '{debt.creditor} hardship program' online"
+        # Default for unknown debt types
+        base_contact["resources"] = {
+            "credit_counseling": {
+                "organization": "NFCC - National Foundation for Credit Counseling",
+                "phone": "1-800-388-2227",
+                "website": "www.nfcc.org",
+                "services": "FREE credit counseling and debt management plans"
+            }
         }
+
+    return base_contact
 
 
 def get_situation_warnings(debt: Debt) -> list:
@@ -425,11 +796,10 @@ def get_situation_warnings(debt: Debt) -> list:
     elif days_late < 120:
         warnings.append({"severity": "CRITICAL", "message": "Charge-off imminent. Contact creditor today."})
     else:
-        warnings.append({"severity": "CRITICAL", "message": "Account likely charged off. Settlement still possible."})
+        warnings.append({"severity": "CRITICAL", "message": "Account likely charged off."})
 
     if debt.interest_rate and debt.interest_rate > 20:
-        warnings.append({"severity": "MEDIUM",
-                         "message": f"High interest rate ({debt.interest_rate}%). Settlement may save money."})
+        warnings.append({"severity": "MEDIUM", "message": f"High interest rate ({debt.interest_rate}%)."})
 
     if debt.balance and debt.balance > 5000:
         warnings.append({"severity": "MEDIUM", "message": "Large balance. Better negotiating power."})
