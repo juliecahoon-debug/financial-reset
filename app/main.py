@@ -12,6 +12,7 @@ from app.routes.goal import router as goal_router
 from app.routes.balance_transfer import router as balance_transfer_router
 from app.routes.consolidation import router as consolidation_router
 from app.routes.hardship import router as hardship_router
+from app.routes.collections import router as collection_router
 
 
 
@@ -73,3 +74,4 @@ app.include_router(goal_router)
 app.include_router(balance_transfer_router)
 app.include_router(consolidation_router)
 app.include_router(hardship_router)
+app.include_router(collection_router)
