@@ -33,7 +33,8 @@ class CreditCardCollectionsService:
         - 30_day_late: 30-59 days late
         - 60_day_late: 60-89 days late
         - 90_day_late: 90-119 days late
-        - charged_off: 120+ days late
+        - 120_day_late: 120-149 days late (cycle 6 - charge-off window)
+        - charged_off: 150+ days late (cycle 7 - charge-off likely occurred)
         """
         if days_late == 0:
             return "current"
@@ -45,44 +46,99 @@ class CreditCardCollectionsService:
             return "60_day_late"
         elif days_late < 120:
             return "90_day_late"
+        elif days_late < 150:
+            return "120_day_late"
         else:
             return "charged_off"
 
     @staticmethod
     def create_alert_for_stage(stage: str, days_late: int) -> Dict:
-        """Create alert data for a collection stage.
+        """Create alert data for a collection stage with consequences.
 
-        Returns dict with: alert_type, severity, message
+        Returns dict with: alert_type, severity, message, consequences
         """
         if stage == "current":
             return None  # No alert for current accounts
 
+
         elif stage == "30_day_late":
+
             return {
                 "alert_type": "30_day_late",
-                "severity": "HIGH",
-                "message": "Your account is 30 days past due. Contact creditor immediately."
+                "severity": "MEDIUM",
+                "message": "Your account is 30 days past due. Contact creditor immediately.",
+                "consequences": [
+                    "Late fee charged to your account",
+                    "Card may be restricted or flagged",
+                    "Account may be reported as past due to credit bureaus",
+                    "Interest will continue to accrue on the account",
+                    "Creditor will start to contact daily to find resolution",
+                    "Interest rate may increase"
+                ]
             }
+
 
         elif stage == "60_day_late":
             return {
                 "alert_type": "60_day_late",
-                "severity": "CRITICAL",
-                "message": "Account is 60 days late. Charge-off window closing. Contact creditor today."
+                "severity": "MEDIUM HIGH",
+                "message": "Account is 60 days late. Charge-off window opening. Contact creditor today.",
+                "consequences": [
+                    "Additional late fees accruing",
+                    "Interest will continue to accrue on the account",
+                    "Creditor will continue to contact daily to find resolution",
+                    "Card charging privileges may be restricted",
+                    "Credit score impact maybe significant",
+                    "Collection agency contact may begin soon",
+                    "Account closure risk increasing"
+                ]
             }
 
         elif stage == "90_day_late":
             return {
                 "alert_type": "90_day_late",
-                "severity": "CRITICAL",
-                "message": "Charge-off imminent (within 30 days). Settlement negotiations or hardship plan needed NOW."
+                "severity": "HIGH",
+                "message": "Account is 90 days late. Charge-off likely within 60 days. Contact creditor immediately.",
+                "consequences": [
+                    "Card suspended - no new charges allowed",
+                    "Interest will continue to accrue on the account",
+                    "Creditor will continue to contact daily to find resolution",
+                    "Severe credit score damage may happen",
+                    "Account likely on creditor's charge-off list",
+                    "Settlement options still available but limited"
+                ]
+            }
+
+        elif stage == "120_day_late":
+            return {
+                "alert_type": "120_day_late",
+                "severity": "SEVERE",
+                "message": "Account is 120+ days late (cycle 6). Charge-off imminent within 30 days. Settlement options limited.",
+                "consequences": [
+                    "Card revoked or restricted (creditor-dependent)",
+                    "Some creditors may offer reinstatement if paid current",
+                    "Interest will continue to accrue on the account",
+                    "Creditor will continue to contact daily to find resolution",
+                    "Attorney place pending letters may be sent to lender to find resolution on account"
+                    "Charge-off imminent within 30 days",
+                    "Collection agency assignment likely",
+                    "Legal action possible (creditor-dependent)"
+                ]
             }
 
         elif stage == "charged_off":
             return {
                 "alert_type": "charged_off",
                 "severity": "CRITICAL",
-                "message": "Account charged off. May be sent to collection agency. Settlement still possible but limited."
+                "message": "Account charged off (cycle 7 - 150+ days late). Likely sent to collection agency. Settlement very limited.",
+                "consequences": [
+                    "Account charged off - creditor may assign to collections",
+                    "Card permanently revoked or restricted",
+                    "Reinstatement unlikely but may be possible with settlement",
+                    "Collection agency may contact you",
+                    "Legal action possible",
+                    "Credit damage will persist for 7 years from charge-off date"
+                ]
             }
 
         return None
@@ -148,6 +204,8 @@ class CreditCardCollectionsService:
                     message=alert_data["message"]
                 )
                 db.add(new_alert)
+                db.commit()
+                db.refresh(new_alert)
 
         return status
 

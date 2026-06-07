@@ -18,6 +18,236 @@ from app.schemas.credit_card_collections import (
 router = APIRouter(prefix="/collections", tags=["collections"])
 
 
+# Helper function to get consequences by alert type AND debt type
+def get_consequences_for_alert(alert_type: str, debt_type: str) -> list:
+    """Return consequences for a given alert type and debt type."""
+
+    # Credit Card specific consequences
+    if debt_type == "credit_card":
+        consequences_map = {
+            "30_day_late": [
+                "Late fee charged to your account",
+                "Card may be restricted or flagged",
+                "Account may be reported as past due to credit bureaus",
+                "Interest rate may increase"
+            ],
+            "60_day_late": [
+                "Additional late fees accruing",
+                "Card charging privileges may be restricted",
+                "Credit score impact significant",
+                "Collection agency contact may begin soon",
+                "Account closure risk increasing"
+            ],
+            "90_day_late": [
+                "Card suspended - no new charges allowed",
+                "Debt collection calls likely beginning",
+                "Severe credit score damage",
+                "Account likely on creditor's charge-off list",
+                "Settlement options still available but limited"
+            ],
+            "120_day_late": [
+                "Card revoked or restricted (creditor-dependent)",
+                "Some creditors may offer reinstatement if paid current",
+                "Charge-off imminent within 30 days",
+                "Collection agency assignment likely",
+                "Legal action possible (creditor-dependent)"
+            ],
+            "charged_off": [
+                "Account charged off - creditor may assign to collections",
+                "Card permanently revoked or restricted",
+                "Reinstatement unlikely but may be possible with settlement",
+                "Collection agency may contact you",
+                "Legal action possible",
+                "Credit damage will persist for 7 years from charge-off date"
+            ]
+        }
+
+    # Auto Loan specific consequences
+    elif debt_type == "auto_loan":
+        consequences_map = {
+            "30_day_late": [
+                "Late fee charged to your account",
+                "Negative mark reported to credit bureaus",
+                "Interest rate may increase",
+                "Creditor may contact you about payment"
+            ],
+            "60_day_late": [
+                "Additional late fees accruing",
+                "Repossession notice may be sent",
+                "Credit score impact significant",
+                "Vehicle at risk - creditor may repossess",
+                "Collection agency contact may begin"
+            ],
+            "90_day_late": [
+                "VEHICLE REPOSSESSION IMMINENT",
+                "Repossession can occur without notice (varies by state)",
+                "Debt collection calls likely beginning",
+                "Severe credit score damage",
+                "Settlement options very limited"
+            ],
+            "120_day_late": [
+                "Vehicle likely repossessed or repossession imminent",
+                "Deficiency balance may be owed after vehicle sale",
+                "Collection agency assigned",
+                "Legal action possible for deficiency",
+                "Credit damage will persist for 7 years"
+            ],
+            "charged_off": [
+                "Account charged off - vehicle repossessed or at imminent risk",
+                "Deficiency balance may be substantial",
+                "Collection agency will pursue deficiency payment",
+                "Wage garnishment possible (creditor-dependent)",
+                "Legal action highly likely"
+            ]
+        }
+
+    # Student Loan specific consequences
+    elif debt_type == "student_loan":
+        consequences_map = {
+            "30_day_late": [
+                "Account reported as delinquent",
+                "Credit score impact beginning",
+                "Loan servicer will contact you",
+                "Income-Driven Repayment Plans may be available"
+            ],
+            "60_day_late": [
+                "Significant delinquency recorded",
+                "Credit score impact increasing",
+                "Wage garnishment process may begin",
+                "Rehabilitation or consolidation options available"
+            ],
+            "90_day_late": [
+                "Loan in default status",
+                "Wage garnishment possible (federal loans)",
+                "Tax refund offset possible (federal loans)",
+                "Credit score severely damaged",
+                "Default interest may be charged"
+            ],
+            "120_day_late": [
+                "Loan in default - guaranty agency assigned",
+                "Wage garnishment likely (federal loans)",
+                "Tax refund offset likely (federal loans)",
+                "Collection fees may be charged",
+                "Professional license suspension possible (some states)"
+            ],
+            "charged_off": [
+                "Loan in default - assigned to debt collector",
+                "Wage garnishment active or imminent (federal)",
+                "Tax refund offset active or imminent (federal)",
+                "Extensive collection efforts ongoing",
+                "Credit damage will persist for 7 years from default"
+            ]
+        }
+
+    # Personal Loan specific consequences
+    elif debt_type == "personal_loan":
+        consequences_map = {
+            "30_day_late": [
+                "Late fee charged to account",
+                "Account reported to credit bureaus as past due",
+                "Interest rate may increase",
+                "Creditor will contact you about payment"
+            ],
+            "60_day_late": [
+                "Additional late fees accruing",
+                "Credit score impact significant",
+                "Collection agency contact may begin",
+                "Acceleration clause may be triggered (full amount due)"
+            ],
+            "90_day_late": [
+                "Loan likely accelerated (full balance due immediately)",
+                "Debt collection calls likely",
+                "Legal action imminent",
+                "Wage garnishment possible",
+                "Credit score severely damaged"
+            ],
+            "120_day_late": [
+                "Legal action likely filed or filed",
+                "Wage garnishment possible or active",
+                "Bank account levy possible",
+                "Collection attorney may be assigned",
+                "Judgment may be entered against you"
+            ],
+            "charged_off": [
+                "Account charged off and assigned to debt collector",
+                "Lawsuit likely or already filed",
+                "Wage garnishment possible or active",
+                "Bank account levy possible",
+                "Credit damage will persist for 7 years from charge-off"
+            ]
+        }
+
+    # Mortgage specific consequences
+    elif debt_type == "mortgage":
+        consequences_map = {
+            "30_day_late": [
+                "Late payment reported to credit bureaus",
+                "Late fees charged to loan balance",
+                "Lender will contact you about payment",
+                "Home equity at risk if delinquency continues"
+            ],
+            "60_day_late": [
+                "Serious delinquency status",
+                "Additional late fees accruing",
+                "Credit score impact significant",
+                "Pre-foreclosure notice may be sent"
+            ],
+            "90_day_late": [
+                "Foreclosure process may begin",
+                "Formal notice of default or intent to foreclose",
+                "Severe credit score damage",
+                "Home ownership at serious risk",
+                "Legal action imminent"
+            ],
+            "120_day_late": [
+                "Foreclosure proceedings likely initiated",
+                "Home may be scheduled for sale at auction",
+                "Eviction possible",
+                "Home loss imminent",
+                "Deficiency balance possible after sale (varies by state)"
+            ],
+            "charged_off": [
+                "Home likely foreclosed or foreclosure in final stages",
+                "Eviction proceedings active",
+                "Deficiency judgment possible (varies by state)",
+                "Homelessness risk",
+                "Credit damage will persist for 7 years"
+            ]
+        }
+
+    else:
+        # Default consequences for unknown debt types
+        consequences_map = {
+            "30_day_late": [
+                "Late fee charged",
+                "Account reported to credit bureaus",
+                "Interest rate may increase"
+            ],
+            "60_day_late": [
+                "Additional fees accruing",
+                "Credit score impact significant",
+                "Collection contact may begin"
+            ],
+            "90_day_late": [
+                "Account in serious delinquency",
+                "Collection agency contact likely",
+                "Legal action possible"
+            ],
+            "120_day_late": [
+                "Account charge-off imminent",
+                "Collection agency assigned",
+                "Legal action likely"
+            ],
+            "charged_off": [
+                "Account charged off",
+                "Collection agency active",
+                "Legal action possible"
+            ]
+        }
+
+    return consequences_map.get(alert_type, [])
+
+
 @router.get("/{debt_id}/status", response_model=CollectionStatusDetailResponse)
 async def get_collection_status(
         debt_id: int,
@@ -42,16 +272,21 @@ async def get_collection_status(
     - Actual delinquency status depends on creditor records
     - Contact your creditor for official status
 
-    TIMELINES ARE ESTIMATES:
-    - Charge-off typically occurs at 120-180 days late
-    - Collection agency involvement timing varies by creditor
-    - These are estimates only
+    TIMELINES ARE ESTIMATES (Vary by Debt Type):
+    - Credit Cards: Charge-off typically occurs at 150+ days late
+    - Auto Loans: Repossession typically occurs at 90-120+ days late
+    - Mortgages: Foreclosure typically begins at 90-120+ days late
+    - Student Loans: Default typically occurs at 90-120+ days late
+    - Personal Loans: Charge-off typically occurs at 120-150+ days late
+    - These are estimates only - actual timelines vary by creditor
 
     IMMEDIATE ACTION NEEDED:
     - If status shows 30+ days late, contact creditor immediately
     - Do not wait to take action
     - Earlier intervention = better outcomes
+    - For auto loans, contact creditor immediately to prevent repossession
     """
+
 
     # Get debt
     debt = db.query(Debt).filter(
@@ -94,6 +329,8 @@ async def get_collection_status(
         action_items = ["Contact creditor TODAY", "Propose settlement or hardship plan"]
     elif status.current_stage == "90_day_late":
         action_items = ["Settlement negotiations or hardship plan needed NOW", "Charge-off imminent"]
+    elif status.current_stage == "120_day_late":
+        action_items = ["Settlement negotiations needed", "Charge-off imminent within 30 days"]
     elif status.current_stage == "charged_off":
         action_items = ["Expect collection agency contact", "Settlement still possible but limited"]
 
@@ -110,6 +347,19 @@ async def get_collection_status(
         }
     ]
 
+    active_alerts = [
+        {
+            "alert_id": alert.id,
+            "type": alert.alert_type,
+            "severity": alert.severity,
+            "message": alert.message,
+            "consequences": get_consequences_for_alert(alert.alert_type, debt.debt_type),
+            "created_at": alert.created_at,
+            "acknowledged": alert.acknowledged
+        }
+        for alert in alerts
+    ]
+
     response = CollectionStatusDetailResponse(
         debt_id=debt_id,
         debt_name=debt.name,
@@ -117,27 +367,36 @@ async def get_collection_status(
         current_balance=float(debt.balance),
         collection_status={
             "stage": status.current_stage,
-            "severity": "LOW" if status.current_stage == "current" else "CRITICAL",
+            "severity": {
+                "current": "LOW",
+                "30_day_late": "MEDIUM",
+                "60_day_late": "MEDIUM HIGH",
+                "90_day_late": "HIGH",
+                "120_day_late": "SEVERE",
+                "charged_off": "CRITICAL"
+            }.get(status.current_stage, "CRITICAL"),
             "days_until_charge_off": days_until_charge_off,
             "charge_off_estimated_date": status.charge_off_estimated_date
         },
-        active_alerts=[
-            {
-                "alert_id": alert.id,
-                "type": alert.alert_type,
-                "severity": alert.severity,
-                "message": alert.message,
-                "created_at": alert.created_at,
-                "acknowledged": alert.acknowledged
-            }
-            for alert in alerts
-        ],
+        active_alerts=active_alerts,
         action_items=action_items,
         disclaimers={
             "information_type": "EDUCATIONAL",
-            "charge_off_timeline": "Charge-off typically occurs at 120-180 days late",
-            "collection_likely": "Account may be sent to collections after charge-off",
-            "contact_creditor": "Contact your creditor for official delinquency status"
+            "charge_off_timeline": (
+                "Charge-off typically occurs at 150+ days late" if debt.debt_type == "credit_card"
+                else "Repossession typically occurs at 90-120+ days late" if debt.debt_type == "auto_loan"
+                else "Foreclosure typically begins at 90-120+ days late" if debt.debt_type == "mortgage"
+                else "Default status typically occurs at 90-120+ days late" if debt.debt_type == "student_loan"
+                else "Charge-off typically occurs at 120-150+ days late"
+            ),
+            "collection_likely": (
+                "Account may be sent to collections after charge-off" if debt.debt_type == "credit_card"
+                else "Vehicle may be repossessed and sold; deficiency balance may be owed" if debt.debt_type == "auto_loan"
+                else "Home will be foreclosed and sold; deficiency may be owed (varies by state)" if debt.debt_type == "mortgage"
+                else "Account will be assigned to debt collector; wage garnishment possible (federal loans)" if debt.debt_type == "student_loan"
+                else "Account may be sent to collections"
+            ),
+            "contact_creditor": "Contact your creditor for official delinquency status and available options"
         },
         next_steps=next_steps,
         timestamp=datetime.utcnow()
@@ -193,6 +452,7 @@ async def get_collection_alerts(
             "type": alert.alert_type,
             "severity": alert.severity,
             "message": alert.message,
+            "consequences": get_consequences_for_alert(alert.alert_type, debt.debt_type),
             "created_at": alert.created_at,
             "days_since_alert": (datetime.utcnow() - alert.created_at).days,
             "recommended_action": "Contact creditor immediately" if alert.severity == "CRITICAL" else "Review your hardship options",
@@ -255,3 +515,4 @@ async def acknowledge_alert(
     )
 
     return response
+
