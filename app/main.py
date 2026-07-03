@@ -4,13 +4,6 @@ from app.database import engine, Base
 from app.routes.user import router as user_router
 from app.routes.auth import router as auth_router
 from app.routes.debt import router as debt_router
-from app.routes.strategy import router as strategy_router
-from app.routes.dashboard import router as dashboard_router
-from app.routes.spending import router as spending_router
-from app.routes.transaction import router as transaction_router
-from app.routes.goal import router as goal_router
-from app.routes.balance_transfer import router as balance_transfer_router
-from app.routes.consolidation import router as consolidation_router
 from app.routes.hardship import router as hardship_router
 from app.routes.collections import router as collection_router
 
@@ -21,9 +14,9 @@ Base.metadata.create_all(bind=engine)
 
 # Create FastAPI app
 app = FastAPI(
-    title="Financial Reset API",
-    description="Debt consolidation and financial optimization with transaction analysis",
-    version="0.10.0"
+    title="Navorafi API",
+    description="Financial crisis navigation - hardship programs, settlement, collections guidance",
+    version="1.0.0-stage4"
 )
 
 # CORS middleware
@@ -66,12 +59,5 @@ async def root():
 app.include_router(user_router)
 app.include_router(auth_router)
 app.include_router(debt_router)
-app.include_router(strategy_router)
-app.include_router(dashboard_router)
-app.include_router(spending_router)
-app.include_router(transaction_router)
-app.include_router(goal_router)
-app.include_router(balance_transfer_router)
-app.include_router(consolidation_router)
 app.include_router(hardship_router)
 app.include_router(collection_router)

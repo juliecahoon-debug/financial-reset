@@ -9,13 +9,13 @@ class CollectionAlertResponse(BaseModel):
     alert_type: str
     severity: str
     message: str
+    consequences: Optional[List[str]] = None
     acknowledged: bool
     acknowledged_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
-
 
 class CreditCardCollectionStatusResponse(BaseModel):
     """Response model for collection status"""
