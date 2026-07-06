@@ -38,6 +38,11 @@ class DebtService:
         return db.query(Debt).filter(Debt.id == debt_id).first()
 
     @staticmethod
+    def get_debt_by_id_for_user(db: Session, debt_id: int, user_id: int) -> Optional[Debt]:
+        """Get debt by ID, scoped to user — returns None if not found or not owned"""
+        return db.query(Debt).filter(Debt.id == debt_id, Debt.user_id == user_id).first()
+
+    @staticmethod
     def get_user_debts(db: Session, user_id: int) -> List[Debt]:
         """Get all debts for a user"""
         return db.query(Debt).filter(Debt.user_id == user_id).all()
