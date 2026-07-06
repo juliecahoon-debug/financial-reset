@@ -16,13 +16,14 @@ class DebtService:
             user_id=user_id,
             name=debt.name,
             debt_type=debt.debt_type,
-            balance=debt.balance,
+            current_principal=debt.current_principal,
             original_balance=debt.original_balance,
             minimum_payment=debt.minimum_payment,
+            monthly_payment=debt.monthly_payment,
             interest_rate=debt.interest_rate,
             opened_date=debt.opened_date,
-            due_date=debt.due_date,
-            creditor=debt.creditor,
+            due_date_day=debt.due_date_day,
+            creditor_name=debt.creditor_name,
             account_number=debt.account_number,
             notes=debt.notes
         )
@@ -46,7 +47,7 @@ class DebtService:
         """Get active debts for a user"""
         return db.query(Debt).filter(
             Debt.user_id == user_id,
-            Debt.status == DebtStatus.ACTIVE
+            Debt.is_active == True
         ).all()
 
     @staticmethod
@@ -80,7 +81,7 @@ class DebtService:
     @staticmethod
     def get_total_debt(debts: List[Debt]) -> float:
         """Calculate total debt balance"""
-        return sum(debt.balance for debt in debts)
+        return sum(debt.current_principal for debt in debts)
 
     @staticmethod
     def get_total_monthly_payment(debts: List[Debt]) -> float:
@@ -97,5 +98,5 @@ class DebtService:
         if total_balance == 0:
             return 0
 
-        weighted_apr = sum(debt.balance * debt.interest_rate for debt in debts) / total_balance
+        weighted_apr = sum(debt.current_principal * debt.interest_rate for debt in debts) / total_balance
         return round(weighted_apr, 2)

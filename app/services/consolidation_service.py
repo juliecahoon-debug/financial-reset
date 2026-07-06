@@ -26,7 +26,7 @@ class ConsolidationService:
         """
 
         # Total debt to consolidate
-        total_debt = sum(d.balance for d in debts)
+        total_debt = sum(d.current_principal for d in debts)
 
         # Calculate origination fee
         orig_fee = total_debt * origination_fee

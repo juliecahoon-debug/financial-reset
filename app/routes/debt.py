@@ -113,14 +113,14 @@ async def calculate_debt_payoff(
             detail="Debt not found"
         )
 
-    payoff = DebtService.calculate_payoff(debt.balance, monthly_payment, debt.interest_rate)
+    payoff = DebtService.calculate_payoff(debt.current_principal, monthly_payment, debt.interest_rate)
 
     return {
         "debt_id": debt.id,
         "name": debt.name,
-        "balance": debt.balance,
+        "current_principal": debt.current_principal,
         "interest_rate": debt.interest_rate,
-        "monthly_interest": round(DebtService.calculate_monthly_interest(debt.balance, debt.interest_rate), 2),
+        "monthly_interest": round(DebtService.calculate_monthly_interest(debt.current_principal, debt.interest_rate), 2),
         "monthly_payment": monthly_payment,
         "months_to_payoff": payoff["months"],
         "total_interest_paid": payoff["total_interest"],

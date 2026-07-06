@@ -50,8 +50,8 @@ class StrategyService:
         debt_state = {}
         for debt in debts:
             debt_state[debt.id] = {
-                "balance": debt.balance,
-                "original_balance": debt.balance,
+                "balance": debt.current_principal,
+                "original_balance": debt.current_principal,
                 "apr": debt.interest_rate,
                 "minimum": debt.minimum_payment or 50,  # Default minimum if not set
                 "total_interest": 0.0,
@@ -65,7 +65,7 @@ class StrategyService:
             debt_order = sorted(debts, key=lambda d: d.interest_rate, reverse=True)
         else:  # SNOWBALL
             # Sort by balance (lowest first)
-            debt_order = sorted(debts, key=lambda d: d.balance)
+            debt_order = sorted(debts, key=lambda d: d.current_principal)
 
         debt_ids_ordered = [d.id for d in debt_order]
         current_focus_index = 0
@@ -195,7 +195,7 @@ class StrategyService:
                 debt_payoff_order=[],
             )
 
-        total_debt = sum(d.balance for d in debts)
+        total_debt = sum(d.current_principal for d in debts)
         total_months = result["total_months"]
         total_interest = result["total_interest"]
         total_amount_paid = total_debt + total_interest
@@ -251,7 +251,7 @@ class StrategyService:
                 debt_payoff_order=[],
             )
 
-        total_debt = sum(d.balance for d in debts)
+        total_debt = sum(d.current_principal for d in debts)
         total_months = result["total_months"]
         total_interest = result["total_interest"]
         total_amount_paid = total_debt + total_interest
