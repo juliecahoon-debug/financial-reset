@@ -1,35 +1,38 @@
 from pydantic import BaseModel
 from typing import Optional
+from decimal import Decimal
 from datetime import datetime
+from app.models.debt import ReliefProgramType
 
 
 class HardshipPlanCreate(BaseModel):
     """Create hardship plan"""
     debt_id: int
-    plan_type: str  # deferment, forbearance, settlement
-    reason_for_hardship: str
+    program_type: ReliefProgramType  # deferment, forbearance, settlement, etc.
+    description: Optional[str] = None
 
-    # Optional fields depending on type
-    deferment_months: Optional[int] = None
-    reduced_payment_amount: Optional[float] = None
-    forbearance_months: Optional[int] = None
-    settlement_percentage: Optional[float] = None
+    # Optional financial terms depending on type
+    duration_months: Optional[int] = None
+    monthly_payment_during: Optional[Decimal] = None
+    settlement_percentage: Optional[Decimal] = None
+    settlement_lump_sum: Optional[Decimal] = None
 
 
 class HardshipPlanResponse(BaseModel):
     """Hardship plan response"""
     id: int
     debt_id: int
-    plan_type: str
+    hardship_case_id: int
+    program_type: ReliefProgramType
+    program_name: Optional[str]
     status: str
-    reason_for_hardship: str
-    deferment_months: Optional[int]
-    reduced_payment_amount: Optional[float]
-    forbearance_months: Optional[int]
-    settlement_percentage: Optional[float]
-    settlement_amount: Optional[float]
-    credit_impact: Optional[str]
-    total_cost: Optional[float]
+    description: Optional[str]
+    duration_months: Optional[int]
+    monthly_payment_during: Optional[Decimal]
+    settlement_percentage: Optional[Decimal]
+    settlement_lump_sum: Optional[Decimal]
+    credit_reporting_treatment: Optional[str]
+    total_cost: Optional[Decimal]
     created_at: datetime
 
     class Config:

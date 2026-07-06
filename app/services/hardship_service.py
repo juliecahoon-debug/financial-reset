@@ -1,8 +1,35 @@
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from app.models.debt import Debt, HardshipPlan
+from app.models.debt import (
+    Debt,
+    HardshipPlan,
+    HardshipCase,
+    HardshipType,
+    HardshipStatus,
+    ReliefProgramType,
+)
 from app.models.user import User
+
+
+def _min_payment(debt: Debt) -> float:
+    """Safely resolve a debt's monthly obligation, tolerating missing values."""
+    return float(getattr(debt, 'minimum_payment', None) or getattr(debt, 'monthly_payment', 0) or 0)
+
+
+_PLAN_TYPE_TO_PROGRAM = {
+    "deferment": ReliefProgramType.DEFERMENT,
+    "forbearance": ReliefProgramType.FORBEARANCE,
+    "settlement": ReliefProgramType.SETTLEMENT,
+    "loan_modification": ReliefProgramType.MODIFICATION,
+    "modification": ReliefProgramType.MODIFICATION,
+    "payment_plan": ReliefProgramType.PAYMENT_PLAN,
+}
+
+
+def _program_type(plan_type: str) -> ReliefProgramType:
+    """Map a free-form plan_type string to the ReliefProgramType enum."""
+    return _PLAN_TYPE_TO_PROGRAM.get((plan_type or "").lower(), ReliefProgramType.PAYMENT_PLAN)
 
 # TODO: Phase 2 - Credit Card Hardship Program Database
 # Many credit card issuers offer hardship programs (payment reduction, deferment, etc)
@@ -32,7 +59,7 @@ class HardshipService:
             debt_type = str(debt.debt_type).upper()
 
         # CONVERT PERCENTAGE TO DECIMAL (12.0% → 0.12)
-        interest_rate = debt.interest_rate / 100 if debt.interest_rate > 1 else debt.interest_rate
+        interest_rate = float(debt.interest_rate) / 100 if float(debt.interest_rate) > 1 else float(debt.interest_rate)
 
         # CREDIT CARDS: Only settlement
         if "CREDIT_CARD" in debt_type or "CREDITCARD" in debt_type:
@@ -41,10 +68,10 @@ class HardshipService:
                 "name": "Debt Settlement Negotiation",
                 "description": "Negotiate to pay a lump sum (typically 40-60% of balance) to clear debt. WARNING: Severe credit and tax consequences. Only consider after contacting creditor about hardship programs FIRST.",
                 "settlement_percentage": 0.50,
-                "settlement_amount": debt.balance * 0.50,
+                "settlement_amount": float(debt.current_principal) * 0.50,
                 "pros": [
-                    f"Pay only ${debt.balance * 0.50:.2f} instead of ${debt.balance:.2f}",
-                    f"Save ${debt.balance * 0.50:.2f}",
+                    f"Pay only ${float(debt.current_principal) * 0.50:.2f} instead of ${float(debt.current_principal):.2f}",
+                    f"Save ${float(debt.current_principal) * 0.50:.2f}",
                     "Get out of debt faster (one lump payment)",
                     "Stop interest accrual immediately"
                 ],
@@ -61,7 +88,7 @@ class HardshipService:
                 "credit_impact": "❌ SEVERE negative impact (-100 to -150 points). Takes 3-5 years to recover.",
                 "timeline": "Immediate settlement if approved, removed from credit after 7 years",
                 "estimated_interest_cost": 0,
-                "estimated_total_cost": debt.balance * 0.50,
+                "estimated_total_cost": float(debt.current_principal) * 0.50,
                 "availability": "Credit cards only"
             })
 
@@ -101,8 +128,8 @@ class HardshipService:
                 "name": "Income-Driven Repayment Plan",
                 "description": "Pay based on your income (10-20% of discretionary income)",
                 "duration_months": 12,
-                "new_monthly_payment": max(debt.minimum_payment * 0.50, 10),
-                "original_monthly_payment": debt.minimum_payment,
+                "new_monthly_payment": max(_min_payment(debt) * 0.50, 10),
+                "original_monthly_payment": _min_payment(debt),
                 "pros": [
                     "Payments based on income (often 10-20% of discretionary)",
                     "Low monthly payments during hardship",
@@ -117,8 +144,8 @@ class HardshipService:
                 ],
                 "credit_impact": "✓ No negative impact. Good for credit building.",
                 "timeline": "20-25 years until forgiveness",
-                "estimated_interest_cost": round(debt.balance * interest_rate * 2, 2),  # Rough estimate
-                "estimated_total_cost": round(debt.balance * interest_rate * 2, 2),
+                "estimated_interest_cost": round(float(debt.current_principal) * interest_rate * 2, 2),  # Rough estimate
+                "estimated_total_cost": round(float(debt.current_principal) * interest_rate * 2, 2),
                 "availability": "Federal student loans only"
             })
 
@@ -127,10 +154,10 @@ class HardshipService:
         # PERSONAL LOANS: Settlement, forbearance
         if "PERSONAL_LOAN" in debt_type or "PERSONALLOAN" in debt_type:
             # Forbearance
-            reduced_payment = max(debt.minimum_payment * 0.50, 50)
+            reduced_payment = max(_min_payment(debt) * 0.50, 50)
             forbearance_months = 6
 
-            balance = debt.balance
+            balance = float(debt.current_principal)
             interest_cost = 0
             for month in range(forbearance_months):
                 monthly_interest = balance * (interest_rate / 12)
@@ -149,9 +176,9 @@ class HardshipService:
                 "description": "Work with lender to reduce payments temporarily",
                 "duration_months": forbearance_months,
                 "new_monthly_payment": round(reduced_payment, 2),
-                "original_monthly_payment": debt.minimum_payment,
+                "original_monthly_payment": _min_payment(debt),
                 "pros": [
-                    f"Reduce payments by 50% (${debt.minimum_payment:.2f} → ${reduced_payment:.2f})",
+                    f"Reduce payments by 50% (${_min_payment(debt):.2f} → ${reduced_payment:.2f})",
                     "Temporary relief during hardship",
                     "Usually no credit damage if approved",
                     "Can extend if needed"
@@ -175,10 +202,10 @@ class HardshipService:
                 "name": "Debt Settlement",
                 "description": "Negotiate lump sum payment to clear debt",
                 "settlement_percentage": 0.65,
-                "settlement_amount": debt.balance * 0.65,
+                "settlement_amount": float(debt.current_principal) * 0.65,
                 "pros": [
-                    f"Pay only ${debt.balance * 0.65:.2f} instead of ${debt.balance:.2f}",
-                    f"Save ${debt.balance * 0.35:.2f}",
+                    f"Pay only ${float(debt.current_principal) * 0.65:.2f} instead of ${float(debt.current_principal):.2f}",
+                    f"Save ${float(debt.current_principal) * 0.35:.2f}",
                     "Faster debt payoff",
                     "Single payment closes account"
                 ],
@@ -191,7 +218,7 @@ class HardshipService:
                 "credit_impact": "⚠️ Moderate-High impact (-60 to -100 points). Takes 2-3 years to recover.",
                 "timeline": "Immediate settlement, 7 years on credit report",
                 "estimated_interest_cost": 0,
-                "estimated_total_cost": debt.balance * 0.65,
+                "estimated_total_cost": float(debt.current_principal) * 0.65,
                 "availability": "Available if you can negotiate"
             })
 
@@ -205,7 +232,7 @@ class HardshipService:
                 "description": "Skip or reduce payments to avoid repossession",
                 "duration_months": 3,
                 "new_monthly_payment": 0,
-                "original_monthly_payment": debt.minimum_payment,
+                "original_monthly_payment": _min_payment(debt),
                 "pros": [
                     "Skip payments to avoid repossession",
                     "Usually 2-3 month deferral available",
@@ -220,8 +247,8 @@ class HardshipService:
                 ],
                 "credit_impact": "⚠️ Moderate impact (-50 to -75 points). Recovers after regular payments resume.",
                 "timeline": "3 months deferral, payments added to loan end",
-                "estimated_interest_cost": round(debt.balance * interest_rate * 0.25, 2),
-                "estimated_total_cost": round(debt.balance * interest_rate * 0.25, 2),
+                "estimated_interest_cost": round(float(debt.current_principal) * interest_rate * 0.25, 2),
+                "estimated_total_cost": round(float(debt.current_principal) * interest_rate * 0.25, 2),
                 "availability": "Contact lender immediately"
             })
 
@@ -231,10 +258,10 @@ class HardshipService:
                 "name": "Loan Modification",
                 "description": "Extend loan term to lower monthly payment",
                 "duration_months": 12,
-                "new_monthly_payment": debt.minimum_payment * 0.85,
-                "original_monthly_payment": debt.minimum_payment,
+                "new_monthly_payment": _min_payment(debt) * 0.85,
+                "original_monthly_payment": _min_payment(debt),
                 "pros": [
-                    f"Lower monthly payment (${debt.minimum_payment * 0.85:.2f})",
+                    f"Lower monthly payment (${_min_payment(debt) * 0.85:.2f})",
                     "Extends loan by 12-24 months",
                     "Keep vehicle",
                     "Avoid repossession"
@@ -247,8 +274,8 @@ class HardshipService:
                 ],
                 "credit_impact": "⚠️ Minor impact (-20 to -30 points).",
                 "timeline": "Extended term, lower payments",
-                "estimated_interest_cost": round(debt.balance * interest_rate * 0.5, 2),
-                "estimated_total_cost": round(debt.balance * interest_rate * 0.5, 2),
+                "estimated_interest_cost": round(float(debt.current_principal) * interest_rate * 0.5, 2),
+                "estimated_total_cost": round(float(debt.current_principal) * interest_rate * 0.5, 2),
                 "availability": "Ask lender about options"
             })
 
@@ -261,8 +288,8 @@ class HardshipService:
                 "name": "Mortgage Forbearance",
                 "description": "Temporarily reduce or pause mortgage payments",
                 "duration_months": 6,
-                "new_monthly_payment": debt.minimum_payment * 0.50,
-                "original_monthly_payment": debt.minimum_payment,
+                "new_monthly_payment": _min_payment(debt) * 0.50,
+                "original_monthly_payment": _min_payment(debt),
                 "pros": [
                     "Reduce payments 30-50%",
                     "Avoid foreclosure",
@@ -277,8 +304,8 @@ class HardshipService:
                 ],
                 "credit_impact": "⚠️ Moderate-High impact (-50 to -100 points). Recovers after forbearance ends.",
                 "timeline": "3-12 months forbearance, then resume payments",
-                "estimated_interest_cost": round(debt.balance * interest_rate * 0.5, 2),
-                "estimated_total_cost": round(debt.balance * interest_rate * 0.5, 2),
+                "estimated_interest_cost": round(float(debt.current_principal) * interest_rate * 0.5, 2),
+                "estimated_total_cost": round(float(debt.current_principal) * interest_rate * 0.5, 2),
                 "availability": "Contact lender or HUD-approved counselor"
             })
 
@@ -304,9 +331,9 @@ class HardshipService:
             debt_type = str(debt.debt_type).upper()
 
         # Define thresholds for all debt types (as percentage of minimum payment)
-        critical_threshold = debt.minimum_payment * 0.25  # 25% of minimum
-        difficult_threshold = debt.minimum_payment * 0.75  # 75% of minimum
-        manageable_threshold = debt.minimum_payment * 1.5  # 150% of minimum
+        critical_threshold = _min_payment(debt) * 0.25  # 25% of minimum
+        difficult_threshold = _min_payment(debt) * 0.75  # 75% of minimum
+        manageable_threshold = _min_payment(debt) * 1.5  # 150% of minimum
 
         recommendation = {
             "situation": "",
@@ -321,25 +348,25 @@ class HardshipService:
                 recommendation["situation"] = "CRITICAL - Severe hardship"
                 recommendation["recommended_plan"] = "settlement"
                 recommendation[
-                    "reason"] = f"You cannot make meaningful payments (${monthly_cash_available:.2f}/month < 25% of minimum ${debt.minimum_payment:.2f}). Settlement is your primary option. Consult creditor about any hardship programs first. Only pursue if you can negotiate within 30 days and have lump sum available."
+                    "reason"] = f"You cannot make meaningful payments (${monthly_cash_available:.2f}/month < 25% of minimum ${_min_payment(debt):.2f}). Settlement is your primary option. Consult creditor about any hardship programs first. Only pursue if you can negotiate within 30 days and have lump sum available."
 
             elif monthly_cash_available < difficult_threshold:
                 recommendation["situation"] = "DIFFICULT - Severe payment struggles"
                 recommendation["recommended_plan"] = "settlement"
                 recommendation[
-                    "reason"] = f"You can only pay 25-75% of minimum (${monthly_cash_available:.2f}/${debt.minimum_payment:.2f}). Settlement is realistic option. Negotiate quickly - creditors more willing when accounts recent. Have lump sum ready."
+                    "reason"] = f"You can only pay 25-75% of minimum (${monthly_cash_available:.2f}/${_min_payment(debt):.2f}). Settlement is realistic option. Negotiate quickly - creditors more willing when accounts recent. Have lump sum ready."
 
             elif monthly_cash_available <= manageable_threshold:
                 recommendation["situation"] = "MANAGEABLE - Tight but making payments"
                 recommendation["recommended_plan"] = "continue_payments"
                 recommendation[
-                    "reason"] = f"You can afford 75-150% of minimum (${monthly_cash_available:.2f}/${debt.minimum_payment:.2f}). BEST: Continue payments to rebuild credit. Contact creditor about hardship programs (many offer payment reduction/deferment). Settlement damages credit 7 years unnecessarily."
+                    "reason"] = f"You can afford 75-150% of minimum (${monthly_cash_available:.2f}/${_min_payment(debt):.2f}). BEST: Continue payments to rebuild credit. Contact creditor about hardship programs (many offer payment reduction/deferment). Settlement damages credit 7 years unnecessarily."
 
             else:
                 recommendation["situation"] = "STRONG - Good payment capacity"
                 recommendation["recommended_plan"] = "continue_payments"
                 recommendation[
-                    "reason"] = f"You can afford 150%+ of minimum (${monthly_cash_available:.2f}/${debt.minimum_payment:.2f}). BEST: Continue payments - debt-free in 18-24 months with zero credit damage. If struggling, contact creditor about hardship programs. Settlement would damage credit 7 years unnecessarily."
+                    "reason"] = f"You can afford 150%+ of minimum (${monthly_cash_available:.2f}/${_min_payment(debt):.2f}). BEST: Continue payments - debt-free in 18-24 months with zero credit damage. If struggling, contact creditor about hardship programs. Settlement would damage credit 7 years unnecessarily."
 
             return recommendation
 
@@ -355,7 +382,7 @@ class HardshipService:
                 recommendation["situation"] = "DIFFICULT - Can't afford minimum"
                 recommendation["recommended_plan"] = "deferment"
                 recommendation[
-                    "reason"] = f"Can't afford minimum (${debt.minimum_payment:.2f}). Deferment or income-driven repayment reduces/pauses payments."
+                    "reason"] = f"Can't afford minimum (${_min_payment(debt):.2f}). Deferment or income-driven repayment reduces/pauses payments."
 
             else:
                 recommendation["situation"] = "MANAGEABLE - Some cash flow"
@@ -376,7 +403,7 @@ class HardshipService:
                 recommendation["situation"] = "DIFFICULT - Can't afford minimum"
                 recommendation["recommended_plan"] = "forbearance"
                 recommendation[
-                    "reason"] = f"Can't afford minimum (${debt.minimum_payment:.2f}). Contact lender about forbearance/hardship plan."
+                    "reason"] = f"Can't afford minimum (${_min_payment(debt):.2f}). Contact lender about forbearance/hardship plan."
 
             elif monthly_cash_available <= manageable_threshold:
                 recommendation["situation"] = "MANAGEABLE - Barely covering minimum"
@@ -385,7 +412,7 @@ class HardshipService:
                     "reason"] = f"Covering minimum with no cushion. Forbearance reduces payments temporarily."
 
             else:
-                settlement_amount = debt.balance * 0.65
+                settlement_amount = float(debt.current_principal) * 0.65
                 months_to_save = settlement_amount / monthly_cash_available
 
                 recommendation["situation"] = "STRONG - Good cash flow"
@@ -413,7 +440,7 @@ class HardshipService:
                 recommendation["situation"] = "DIFFICULT - Can't afford minimum"
                 recommendation["recommended_plan"] = "forbearance"
                 recommendation[
-                    "reason"] = f"Can't afford minimum (${debt.minimum_payment:.2f}). Request payment deferral to avoid repossession."
+                    "reason"] = f"Can't afford minimum (${_min_payment(debt):.2f}). Request payment deferral to avoid repossession."
 
             elif monthly_cash_available <= manageable_threshold:
                 recommendation["situation"] = "MANAGEABLE - Tight on payments"
@@ -431,17 +458,17 @@ class HardshipService:
 
         # MORTGAGES: Forbearance/modification available
         if "MORTGAGE" in debt_type:
-            if monthly_cash_available < debt.minimum_payment * 0.5:
+            if monthly_cash_available < _min_payment(debt) * 0.5:
                 recommendation["situation"] = "CRITICAL - Risk of foreclosure"
                 recommendation["recommended_plan"] = "forbearance"
                 recommendation[
                     "reason"] = "Contact lender IMMEDIATELY. Forbearance prevents foreclosure. HUD counselor can help."
 
-            elif monthly_cash_available < debt.minimum_payment:
+            elif monthly_cash_available < _min_payment(debt):
                 recommendation["situation"] = "DIFFICULT - Can't afford full payment"
                 recommendation["recommended_plan"] = "forbearance"
                 recommendation[
-                    "reason"] = f"Short on mortgage (${debt.minimum_payment:.2f}). Forbearance temporarily reduces/pauses payments."
+                    "reason"] = f"Short on mortgage (${_min_payment(debt):.2f}). Forbearance temporarily reduces/pauses payments."
 
             else:
                 recommendation["situation"] = "MANAGEABLE - Covering payments"
@@ -465,9 +492,9 @@ class HardshipService:
         """Calculate impact of deferment on debt"""
 
         # Convert percentage to decimal (12.0 → 0.12)
-        interest_rate = debt.interest_rate / 100 if debt.interest_rate > 1 else debt.interest_rate
+        interest_rate = float(debt.interest_rate) / 100 if float(debt.interest_rate) > 1 else float(debt.interest_rate)
 
-        balance = debt.balance
+        balance = float(debt.current_principal)
         total_interest = 0
 
         for month in range(deferment_months):
@@ -480,7 +507,7 @@ class HardshipService:
         return {
             "plan_type": "deferment",
             "deferment_months": deferment_months,
-            "current_balance": debt.balance,
+            "current_balance": float(debt.current_principal),
             "balance_after_deferment": round(new_balance, 2),
             "interest_accrued": round(total_interest, 2),
             "total_increase": round(total_interest, 2),
@@ -497,9 +524,9 @@ class HardshipService:
         """Calculate impact of forbearance on debt"""
 
         # Convert percentage to decimal
-        interest_rate = debt.interest_rate / 100 if debt.interest_rate > 1 else debt.interest_rate
+        interest_rate = float(debt.interest_rate) / 100 if float(debt.interest_rate) > 1 else float(debt.interest_rate)
 
-        balance = debt.balance
+        balance = float(debt.current_principal)
         total_interest = 0
 
         for month in range(forbearance_months):
@@ -518,10 +545,10 @@ class HardshipService:
         return {
             "plan_type": "forbearance",
             "forbearance_months": forbearance_months,
-            "original_payment": debt.minimum_payment,
+            "original_payment": _min_payment(debt),
             "reduced_payment": reduced_payment,
-            "monthly_savings": round(debt.minimum_payment - reduced_payment, 2),
-            "current_balance": debt.balance,
+            "monthly_savings": round(_min_payment(debt) - reduced_payment, 2),
+            "current_balance": float(debt.current_principal),
             "balance_after_forbearance": round(new_balance, 2),
             "interest_accrued": round(total_interest, 2),
             "total_increase": round(total_interest, 2),
@@ -536,12 +563,12 @@ class HardshipService:
     ) -> Dict:
         """Calculate impact of settlement negotiation"""
 
-        settlement_amount = debt.balance * settlement_percentage
-        amount_forgiven = debt.balance - settlement_amount
+        settlement_amount = float(debt.current_principal) * settlement_percentage
+        amount_forgiven = float(debt.current_principal) - settlement_amount
 
         return {
             "plan_type": "settlement",
-            "current_balance": debt.balance,
+            "current_balance": float(debt.current_principal),
             "settlement_amount": round(settlement_amount, 2),
             "amount_forgiven": round(amount_forgiven, 2),
             "savings": round(amount_forgiven, 2),
@@ -582,7 +609,7 @@ class HardshipService:
         elif plan_type == "forbearance":
             impact = HardshipService.calculate_forbearance_impact(
                 debt,
-                kwargs.get("reduced_payment_amount", debt.minimum_payment * 0.5),
+                kwargs.get("reduced_payment_amount", _min_payment(debt) * 0.5),
                 kwargs.get("forbearance_months", 12)
             )
             total_cost = impact["interest_accrued"]
@@ -597,17 +624,31 @@ class HardshipService:
         else:
             raise ValueError("Invalid plan type")
 
+        # HardshipPlan requires a parent HardshipCase (FK is NOT NULL)
+        hardship_case = HardshipCase(
+            debt_id=debt_id,
+            user_id=user_id,
+            hardship_type=HardshipType.OTHER,
+            hardship_description=reason,
+            hardship_start_date=datetime.utcnow(),
+            case_status=HardshipStatus.OPEN,
+        )
+        db.add(hardship_case)
+        db.flush()
+
+        duration_months = kwargs.get("deferment_months") or kwargs.get("forbearance_months")
+
         hardship_plan = HardshipPlan(
             user_id=user_id,
             debt_id=debt_id,
-            plan_type=plan_type,
-            reason_for_hardship=reason,
-            deferment_months=kwargs.get("deferment_months"),
-            reduced_payment_amount=kwargs.get("reduced_payment_amount"),
-            forbearance_months=kwargs.get("forbearance_months"),
+            hardship_case_id=hardship_case.id,
+            program_type=_program_type(plan_type),
+            description=reason,
+            monthly_payment_during=kwargs.get("reduced_payment_amount"),
+            duration_months=duration_months,
             settlement_percentage=kwargs.get("settlement_percentage"),
-            settlement_amount=kwargs.get("settlement_amount"),
-            credit_impact=impact.get("credit_impact"),
+            settlement_lump_sum=kwargs.get("settlement_amount"),
+            credit_reporting_treatment=impact.get("credit_impact"),
             total_cost=total_cost,
             status="created"
         )
@@ -627,14 +668,14 @@ class HardshipService:
         Plus hardship options (settlement, forbearance, deferment)
         """
 
-        interest_rate = debt.interest_rate / 100 if debt.interest_rate > 1 else debt.interest_rate
+        interest_rate = float(debt.interest_rate) / 100 if float(debt.interest_rate) > 1 else float(debt.interest_rate)
 
         comparison = {
             "debt_id": debt.id,
             "debt_name": debt.name,
-            "current_balance": debt.balance,
-            "minimum_payment": debt.minimum_payment,
-            "interest_rate": debt.interest_rate,
+            "current_balance": float(debt.current_principal),
+            "minimum_payment": _min_payment(debt),
+            "interest_rate": float(debt.interest_rate),
             "payment_scenarios": [],
             "custom_scenario": None,
             "hardship_options": []
@@ -643,7 +684,7 @@ class HardshipService:
         # Helper function to calculate payoff
         def calculate_payoff(monthly_payment: float):
             months = 0
-            balance = debt.balance
+            balance = float(debt.current_principal)
             total_interest = 0
 
             while balance > 0 and months < 360:
@@ -656,18 +697,18 @@ class HardshipService:
             return {
                 "months": months,
                 "total_interest": round(total_interest, 2),
-                "total_paid": round(debt.balance + total_interest, 2)
+                "total_paid": round(float(debt.current_principal) + total_interest, 2)
             }
 
         # Calculate minimum payment payoff for reference
-        min_payoff = calculate_payoff(debt.minimum_payment)
+        min_payoff = calculate_payoff(_min_payment(debt))
 
         # PRESET PAYMENT SCENARIOS
         preset_scenarios = [
-            ("minimum", "Minimum Payment", debt.minimum_payment),
-            ("moderate", "2x Minimum (Moderate)", debt.minimum_payment * 2),
-            ("aggressive", "3x Minimum (Aggressive)", debt.minimum_payment * 3),
-            ("very_aggressive", "4x Minimum (Very Aggressive)", debt.minimum_payment * 4)
+            ("minimum", "Minimum Payment", _min_payment(debt)),
+            ("moderate", "2x Minimum (Moderate)", _min_payment(debt) * 2),
+            ("aggressive", "3x Minimum (Aggressive)", _min_payment(debt) * 3),
+            ("very_aggressive", "4x Minimum (Very Aggressive)", _min_payment(debt) * 4)
         ]
 
         for scenario_type, label, payment_amount in preset_scenarios:
@@ -739,7 +780,7 @@ class HardshipService:
         # Settlement option
         if "CREDIT_CARD" in debt_type or "PERSONAL_LOAN" in debt_type:
             settlement_percentage = 0.50
-            settlement_amount = debt.balance * settlement_percentage
+            settlement_amount = float(debt.current_principal) * settlement_percentage
 
             comparison["hardship_options"].append({
                 "option_type": "settlement",
@@ -747,16 +788,16 @@ class HardshipService:
                 "description": "Negotiate to pay lump sum (typically 40-60% of balance)",
                 "lump_sum_required": round(settlement_amount, 2),
                 "settlement_percentage": settlement_percentage,
-                "amount_forgiven": round(debt.balance - settlement_amount, 2),
-                "months_to_save_at_minimum": round(settlement_amount / debt.minimum_payment,
-                                                   1) if debt.minimum_payment > 0 else 0,
+                "amount_forgiven": round(float(debt.current_principal) - settlement_amount, 2),
+                "months_to_save_at_minimum": round(settlement_amount / _min_payment(debt),
+                                                   1) if _min_payment(debt) > 0 else 0,
                 "total_interest_paid": 0,
                 "total_amount_paid": round(settlement_amount, 2),
                 "credit_impact": "SEVERE negative - 100-150 point drop, stays 7 years",
                 "credit_score_change": "-100 to -150 points (takes 3-5 years to recover)",
-                "tax_implications": f"Forgiven ${debt.balance - settlement_amount:.2f} may be taxable income",
+                "tax_implications": f"Forgiven ${float(debt.current_principal) - settlement_amount:.2f} may be taxable income",
                 "pros": [
-                    f"Save ${debt.balance - settlement_amount:.2f} (50%)",
+                    f"Save ${float(debt.current_principal) - settlement_amount:.2f} (50%)",
                     "Resolve debt faster (one lump payment)",
                     "Stop interest accrual immediately"
                 ],
@@ -764,7 +805,7 @@ class HardshipService:
                     f"Requires ${settlement_amount:.2f} lump sum",
                     "SEVERE credit damage (100-150 points)",
                     "Settled debt on credit for 7 years",
-                    f"Potential tax bill of ~${(debt.balance - settlement_amount) * 0.22:.2f}"
+                    f"Potential tax bill of ~${(float(debt.current_principal) - settlement_amount) * 0.22:.2f}"
                 ],
                 "recommendation_score": 30
             })
@@ -772,9 +813,9 @@ class HardshipService:
         # Forbearance option
         if "STUDENT_LOAN" in debt_type or "PERSONAL_LOAN" in debt_type or "AUTO_LOAN" in debt_type:
             forbearance_months = 6
-            reduced_payment = max(debt.minimum_payment * 0.50, 50)
+            reduced_payment = max(_min_payment(debt) * 0.50, 50)
 
-            balance = debt.balance
+            balance = float(debt.current_principal)
             forbearance_interest = 0
 
             for month in range(forbearance_months):
@@ -797,7 +838,7 @@ class HardshipService:
                 "credit_score_change": "-20 to -50 points (recovers in 6-12 months)",
                 "pros": [
                     f"Reduce payments to ${reduced_payment:.2f}/month",
-                    f"Save ${(debt.minimum_payment - reduced_payment) * forbearance_months:.2f} over 6 months",
+                    f"Save ${(_min_payment(debt) - reduced_payment) * forbearance_months:.2f} over 6 months",
                     "Temporary relief"
                 ],
                 "cons": [
@@ -812,7 +853,7 @@ class HardshipService:
         if "STUDENT_LOAN" in debt_type:
             deferment_months = 6
 
-            balance = debt.balance
+            balance = float(debt.current_principal)
             deferment_interest = 0
 
             for month in range(deferment_months):

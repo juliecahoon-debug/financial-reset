@@ -336,7 +336,7 @@ async def get_collection_status(
 
     next_steps = [
         {
-            "action": f"Call {debt.creditor}",
+            "action": f"Call {debt.creditor_name}",
             "timeline": "TODAY" if status.current_stage != "current" else "This month",
             "why": "Confirm delinquency status and discuss options"
         },
@@ -363,8 +363,8 @@ async def get_collection_status(
     response = CollectionStatusDetailResponse(
         debt_id=debt_id,
         debt_name=debt.name,
-        creditor=debt.creditor,
-        current_balance=float(debt.balance),
+        creditor=debt.creditor_name,
+        current_balance=float(debt.current_principal),
         collection_status={
             "stage": status.current_stage,
             "severity": {

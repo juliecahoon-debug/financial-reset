@@ -34,7 +34,7 @@ class DashboardService:
 
         # Debt counts
         all_debts = debts
-        active_debts = [d for d in debts if d.status == DebtStatus.ACTIVE]
+        active_debts = [d for d in debts if d.is_active]
         paid_off_debts = [d for d in debts if d.status == DebtStatus.PAID_OFF]
 
         # APR stats
@@ -81,7 +81,7 @@ class DashboardService:
         for debt in debts:
             debt_type = debt.debt_type.value if hasattr(debt.debt_type, 'value') else str(debt.debt_type)
             breakdown[debt_type]["count"] += 1
-            breakdown[debt_type]["total_balance"] += debt.balance
+            breakdown[debt_type]["total_balance"] += debt.current_principal
             breakdown[debt_type]["total_minimum"] += debt.minimum_payment or 0
             breakdown[debt_type]["total_apr"] += debt.interest_rate
 
@@ -109,7 +109,7 @@ class DashboardService:
         for debt in debts:
             status = debt.status.value if hasattr(debt.status, 'value') else str(debt.status)
             breakdown[status]["count"] += 1
-            breakdown[status]["total_balance"] += debt.balance
+            breakdown[status]["total_balance"] += debt.current_principal
 
         result = []
         for status, data in breakdown.items():
@@ -205,7 +205,7 @@ class DashboardService:
         total_debt = DebtService.get_total_debt(debts)
         total_payments = DebtService.get_total_monthly_payment(debts)
         average_apr = DebtService.get_weighted_apr(debts)
-        active_debts = [d for d in debts if d.status == DebtStatus.ACTIVE]
+        active_debts = [d for d in debts if d.is_active]
 
         # Calculate ratios
         debt_to_income = total_debt / monthly_income if monthly_income > 0 else 100

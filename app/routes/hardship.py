@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
-from app.models.debt import Debt, HardshipPlan
+from app.models.debt import Debt, HardshipPlan, HardshipCase, HardshipType, HardshipStatus
 from app.dependencies import get_current_user
-from app.services.hardship_service import HardshipService
+from app.services.hardship_service import HardshipService, _min_payment, _program_type
 from app.schemas.hardship import (
     HardshipPlanCreate, HardshipPlanResponse, HardshipPlanOption
 )
@@ -98,10 +98,10 @@ async def get_hardship_options(
         "debt_id": debt_id,
         "debt_name": debt.name,
         "debt_type": debt.debt_type,
-        "creditor": debt.creditor,
-        "current_balance": float(debt.balance),
-        "interest_rate": float(debt.interest_rate) if debt.interest_rate else None,
-        "minimum_payment": float(debt.minimum_payment) if hasattr(debt, 'minimum_payment') else None,
+        "creditor": debt.creditor_name,
+        "current_balance": float(float(debt.current_principal)),
+        "interest_rate": float(float(debt.interest_rate)) if float(debt.interest_rate) else None,
+        "minimum_payment": float(_min_payment(debt)) if hasattr(debt, 'minimum_payment') else None,
         "status": debt.status,
         "days_late": getattr(debt, 'days_late', 0),
 
@@ -366,7 +366,7 @@ async def calculate_settlement(
             "tax_professional_required": "You MUST consult a CPA before settling",
             "last_resort_only": "Settlement should be considered only after all other options fail",
         },
-        "tax_warning": f"Forgiven debt of ${debt.balance * (1 - settlement_percentage):,.2f} may be taxable income.",
+        "tax_warning": f"Forgiven debt of ${float(debt.current_principal) * (1 - settlement_percentage):,.2f} may be taxable income.",
         "credit_impact_warning": "Credit score will drop 100-150+ points. Takes 3-5 years to recover.",
         "timestamp": datetime.utcnow().isoformat()
     }
@@ -422,14 +422,14 @@ async def create_hardship_plan(
     total_cost = 0
 
     if plan_type.lower() == "settlement":
-        settlement_amount = debt.balance * settlement_percentage
+        settlement_amount = float(debt.current_principal) * settlement_percentage
         total_cost = settlement_amount
 
     elif plan_type.lower() == "forbearance":
-        reduced_payment_amount = max(debt.minimum_payment * 0.50, 50)
+        reduced_payment_amount = max(_min_payment(debt) * 0.50, 50)
         forbearance_months = 6
-        interest_rate = debt.interest_rate / 100 if debt.interest_rate > 1 else debt.interest_rate
-        balance = debt.balance
+        interest_rate = float(debt.interest_rate) / 100 if float(debt.interest_rate) > 1 else float(debt.interest_rate)
+        balance = float(debt.current_principal)
         for month in range(forbearance_months):
             monthly_interest = balance * (interest_rate / 12)
             total_cost += monthly_interest
@@ -439,26 +439,38 @@ async def create_hardship_plan(
 
     elif plan_type.lower() == "deferment":
         deferment_months = 6
-        interest_rate = debt.interest_rate / 100 if debt.interest_rate > 1 else debt.interest_rate
-        balance = debt.balance
+        interest_rate = float(debt.interest_rate) / 100 if float(debt.interest_rate) > 1 else float(debt.interest_rate)
+        balance = float(debt.current_principal)
         for month in range(deferment_months):
             monthly_interest = balance * (interest_rate / 12)
             total_cost += monthly_interest
             balance += monthly_interest
         total_cost = round(total_cost, 2)
 
+    # HardshipPlan requires a parent HardshipCase (FK is NOT NULL)
+    hardship_case = HardshipCase(
+        debt_id=debt_id,
+        user_id=current_user.id,
+        hardship_type=HardshipType.OTHER,
+        hardship_description=reason_for_hardship,
+        hardship_start_date=datetime.utcnow(),
+        case_status=HardshipStatus.OPEN,
+    )
+    db.add(hardship_case)
+    db.flush()
+
     # Create hardship plan
     hardship_plan = HardshipPlan(
         user_id=current_user.id,
         debt_id=debt_id,
-        plan_type=plan_type,
-        reason_for_hardship=reason_for_hardship,
+        hardship_case_id=hardship_case.id,
+        program_type=_program_type(plan_type),
+        description=reason_for_hardship,
         status="created",
         settlement_percentage=settlement_percentage if plan_type.lower() == "settlement" else 0,
-        settlement_amount=settlement_amount,
-        reduced_payment_amount=reduced_payment_amount,
-        forbearance_months=forbearance_months,
-        deferment_months=deferment_months,
+        settlement_lump_sum=settlement_amount,
+        monthly_payment_during=reduced_payment_amount,
+        duration_months=forbearance_months or deferment_months,
         total_cost=total_cost
     )
 
@@ -469,12 +481,12 @@ async def create_hardship_plan(
     response = {
         "plan_id": hardship_plan.id,
         "debt_id": hardship_plan.debt_id,
-        "plan_type": hardship_plan.plan_type,
+        "plan_type": hardship_plan.program_type.value,
         "status": hardship_plan.status,
         "plan_summary": {
             "debt_name": debt.name,
-            "creditor": debt.creditor,
-            "current_balance": float(debt.balance),
+            "creditor": debt.creditor_name,
+            "current_balance": float(float(debt.current_principal)),
         },
         "critical_warnings": [
             "⚠️  This plan is NOT approved by your creditor yet",
@@ -521,8 +533,8 @@ async def get_user_hardship_plans(
             "plan_id": plan.id,
             "debt_id": plan.debt_id,
             "debt_name": debt.name if debt else "Unknown",
-            "creditor": debt.creditor if debt else "Unknown",
-            "plan_type": plan.plan_type,
+            "creditor": debt.creditor_name if debt else "Unknown",
+            "plan_type": plan.program_type.value if plan.program_type else None,
             "status": plan.status,
             "created_at": plan.created_at.isoformat() if hasattr(plan.created_at, 'isoformat') else str(
                 plan.created_at),
@@ -550,7 +562,7 @@ def get_recommended_steps(debt: Debt) -> list:
         },
         {
             "step": 2,
-            "action": f"Contact {debt.creditor}'s hardship department",
+            "action": f"Contact {debt.creditor_name}'s hardship department",
             "why": "Confirm which programs apply to YOUR account",
         },
         {
@@ -590,10 +602,10 @@ def get_creditor_contact(debt: Debt) -> dict:
         "Discover": {"phone": "1-800-347-2683", "department": "Customer Service"},
     }
 
-    known = creditor_info.get(debt.creditor)
+    known = creditor_info.get(debt.creditor_name)
 
     base_contact = {
-        "creditor_name": debt.creditor,
+        "creditor_name": debt.creditor_name,
         "phone": known["phone"] if known else "See back of your card",
         "department": known["department"] if known else "Hardship Department",
         "what_to_say": "I'm experiencing financial hardship and would like to discuss payment relief options.",
@@ -798,10 +810,10 @@ def get_situation_warnings(debt: Debt) -> list:
     else:
         warnings.append({"severity": "CRITICAL", "message": "Account likely charged off."})
 
-    if debt.interest_rate and debt.interest_rate > 20:
-        warnings.append({"severity": "MEDIUM", "message": f"High interest rate ({debt.interest_rate}%)."})
+    if float(debt.interest_rate) and float(debt.interest_rate) > 20:
+        warnings.append({"severity": "MEDIUM", "message": f"High interest rate ({float(debt.interest_rate)}%)."})
 
-    if debt.balance and debt.balance > 5000:
+    if float(debt.current_principal) and float(debt.current_principal) > 5000:
         warnings.append({"severity": "MEDIUM", "message": "Large balance. Better negotiating power."})
 
     return warnings
