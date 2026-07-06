@@ -16,20 +16,12 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    # Relationship to debts
-    debts = relationship("Debt", back_populates="user")
-
-    # Add to User class:
-    transactions = relationship("Transaction", back_populates="user", cascade="all, delete-orphan")
-
-    # Add to User class:
-    goals = relationship("Goal", back_populates="user", cascade="all, delete-orphan")
-    balance_transfers = relationship("BalanceTransfer", back_populates="user", cascade="all, delete-orphan")
-    consolidation_loans = relationship("ConsolidationLoan", back_populates="user", cascade="all, delete-orphan")
-    scenarios = relationship("Scenario", back_populates="user", cascade="all, delete-orphan")
-
-    # Add inside User class:
+    # Relationships
+    debts = relationship("Debt", back_populates="user", cascade="all, delete-orphan")
     hardship_plans = relationship("HardshipPlan", back_populates="user", cascade="all, delete-orphan")
+    hardship_cases = relationship("HardshipCase", back_populates="user", cascade="all, delete-orphan")
+    settlement_negotiations = relationship("SettlementNegotiation", back_populates="user", cascade="all, delete-orphan")
+    cost_benefit_analyses = relationship("CostBenefitAnalysis", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, username={self.username})>"

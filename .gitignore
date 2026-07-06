@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
