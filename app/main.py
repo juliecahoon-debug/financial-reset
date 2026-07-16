@@ -7,6 +7,7 @@ from app.routes.auth import router as auth_router
 from app.routes.debt import router as debt_router
 from app.routes.hardship import router as hardship_router
 from app.routes.collections import router as collection_router
+from app.routes.resilience import router as resilience_router
 
 
 
@@ -65,3 +66,4 @@ app.include_router(auth_router)
 app.include_router(debt_router)
 app.include_router(hardship_router)
 app.include_router(collection_router)
+app.include_router(resilience_router)

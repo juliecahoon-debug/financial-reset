@@ -17,6 +17,8 @@ from app.models.debt import (
 
 from app.models.credit_card_collections import CreditCardCollectionStatus, CollectionAlert
 
+from app.models import resilience, momentum, friction  # noqa: F401
+
 __all__ = [
     "User", "Debt", "DebtType", "DebtStatus", "HardshipPlan",
     "CreditCardCollectionStatus", "CollectionAlert"
