@@ -374,6 +374,16 @@ async def calculate_settlement(
     return enhanced_impact
 
 
+@router.post("/cases")
+async def create_hardship_case_alias(
+    request: CreateHardshipPlanRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Alias for POST /hardship/create — creates a hardship case and plan."""
+    return await create_hardship_plan(request, current_user, db)
+
+
 @router.post("/create")
 async def create_hardship_plan(
         request: CreateHardshipPlanRequest,
