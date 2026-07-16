@@ -432,3 +432,103 @@ class StateOverlay(Base):
 
     def __repr__(self):
         return f"<StateOverlay(state_code={self.state_code})>"
+
+
+# ============================================================================
+# STRATEGY / PLANNING TABLES
+# ============================================================================
+
+class BalanceTransfer(Base):
+    """Balance transfer offer used to model 0% promotional payoff strategies"""
+    __tablename__ = "balance_transfers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    card_name = Column(String(255), nullable=False)
+    intro_apr = Column(Float, default=0.0)
+    regular_apr = Column(Float, nullable=False)
+    promo_months = Column(Integer, nullable=False)
+    balance_transfer_fee = Column(Float, default=0.03)
+    credit_limit = Column(Float, nullable=False)
+    transfer_amount = Column(Float, nullable=True)
+    estimated_monthly_payment = Column(Float, nullable=True)
+
+    status = Column(String(50), default="active")
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<BalanceTransfer(id={self.id}, user_id={self.user_id}, card_name={self.card_name})>"
+
+
+class ConsolidationLoan(Base):
+    """Debt consolidation loan used to model single-loan payoff strategies"""
+    __tablename__ = "consolidation_loans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    lender_name = Column(String(255))
+    consolidation_apr = Column(Float, nullable=False)
+    loan_term_months = Column(Integer, nullable=False)
+    origination_fee = Column(Float, default=0.02)
+    total_loan_amount = Column(Float, nullable=True)
+    monthly_payment = Column(Float, nullable=True)
+
+    status = Column(String(50), default="active")
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<ConsolidationLoan(id={self.id}, user_id={self.user_id}, apr={self.consolidation_apr})>"
+
+
+class Goal(Base):
+    """Financial goal used for goal planning and scenario modeling"""
+    __tablename__ = "goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    goal_type = Column(String(50), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(String(1000), nullable=True)
+    target_amount = Column(Float, nullable=False)
+    current_savings = Column(Float, default=0)
+    target_date = Column(Date, nullable=False)
+    priority = Column(Integer, default=1)
+    annual_return_rate = Column(Float, default=0.02)
+
+    status = Column(String(50), default="active", index=True)
+    monthly_allocation = Column(Float, nullable=True)
+    estimated_completion_date = Column(Date, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Goal(id={self.id}, user_id={self.user_id}, name={self.name})>"
+
+
+class Scenario(Base):
+    """What-if scenario generated for a goal"""
+    __tablename__ = "scenarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=True, index=True)
+
+    name = Column(String(100), nullable=False)
+    monthly_debt_payment = Column(Float, default=0)
+    debt_payoff_months = Column(Integer, default=0)
+    monthly_goal_allocation = Column(Float, default=0)
+    annual_return_rate = Column(Float, default=0.02)
+    total_months_to_goal = Column(Integer, default=0)
+    total_invested = Column(Float, default=0)
+    total_interest_earned = Column(Float, default=0)
+    final_goal_amount = Column(Float, default=0)
+    estimated_credit_score_improvement = Column(Integer, default=0)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Scenario(id={self.id}, name={self.name})>"

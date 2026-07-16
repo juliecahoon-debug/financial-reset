@@ -7,6 +7,13 @@ from app.routes.auth import router as auth_router
 from app.routes.debt import router as debt_router
 from app.routes.hardship import router as hardship_router
 from app.routes.collections import router as collection_router
+from app.routes.strategy import router as strategy_router
+from app.routes.dashboard import router as dashboard_router
+from app.routes.balance_transfer import router as balance_transfer_router
+from app.routes.consolidation import router as consolidation_router
+from app.routes.goals import router as goals_router
+from app.routes.spending import router as spending_router
+from app.routes.transactions import router as transactions_router
 
 
 
@@ -65,3 +72,10 @@ app.include_router(auth_router)
 app.include_router(debt_router)
 app.include_router(hardship_router)
 app.include_router(collection_router)
+app.include_router(strategy_router)
+app.include_router(dashboard_router)
+app.include_router(balance_transfer_router)
+app.include_router(consolidation_router)
+app.include_router(goals_router)
+app.include_router(spending_router)
+app.include_router(transactions_router)
