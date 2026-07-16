@@ -134,8 +134,14 @@ async def calculate_friction_points(user_id: int, db: Session) -> dict:
 
         # ── FRICTION 4: LATE PAYMENTS ─────────────────────────────────────────
         # Any delinquent accounts
+        DELINQUENT_STATUSES = {
+            DebtStatus.DELINQ_30,
+            DebtStatus.DELINQ_60,
+            DebtStatus.DELINQ_90,
+            DebtStatus.DELINQ_120,
+        }
         late_count = sum(
-            1 for d in debts if d.status == DebtStatus.DELINQUENT
+            1 for d in debts if d.status in DELINQUENT_STATUSES
         )
 
         if late_count > 2:
