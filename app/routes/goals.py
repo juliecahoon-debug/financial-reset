@@ -53,7 +53,8 @@ def get_scenarios(
     goal = GoalService.get_goal_by_id(db, goal_id)
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
-    return GoalService.generate_scenarios(goal, monthly_income, current_debt_payments)
+    # Service expects: db, user_id, goal, monthly_income, debts=None
+    return GoalService.generate_scenarios(db, current_user.id, goal, monthly_income)
 
 @router.put("/{goal_id}")
 def update_goal(
