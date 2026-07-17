@@ -432,3 +432,65 @@ class StateOverlay(Base):
 
     def __repr__(self):
         return f"<StateOverlay(state_code={self.state_code})>"
+
+
+# ============================================================================
+# BALANCE TRANSFER / GOALS / TRANSACTIONS
+# ============================================================================
+
+class BalanceTransfer(Base):
+    __tablename__ = "balance_transfers"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    card_name = Column(String, nullable=False)
+    intro_apr = Column(Float, default=0.0)
+    regular_apr = Column(Float, nullable=False)
+    promo_months = Column(Integer, nullable=False)
+    balance_transfer_fee = Column(Float, default=0.03)
+    credit_limit = Column(Float, nullable=False)
+    transfer_amount = Column(Float, nullable=True)
+    estimated_monthly_payment = Column(Float, nullable=True)
+    status = Column(String, default="active")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Goal(Base):
+    __tablename__ = "goals"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    goal_type = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    target_amount = Column(Float, nullable=False)
+    current_savings = Column(Float, default=0.0)
+    target_date = Column(DateTime, nullable=False)
+    priority = Column(Integer, default=1)
+    annual_return_rate = Column(Float, default=0.02)
+    status = Column(String, default="active")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(DateTime, nullable=False)
+    description = Column(String, nullable=False)
+    amount = Column(Float, nullable=False)
+    merchant = Column(String, nullable=True)
+    category = Column(String, default="other")
+    confidence = Column(Float, default=0.8)
+    is_recurring = Column(Boolean, default=False)
+    recurring_pattern = Column(String, nullable=True)
+    source_type = Column(String, default="csv")
+    source_file = Column(String, nullable=True)
+    account_type = Column(String, nullable=True)
+    account_number = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# Non-table helper type: goal_service imports `Scenario` from this module as a
+# return annotation for what-if scenario dicts. The concrete shape lives in
+# app.schemas.goal.Scenario; this placeholder keeps the import resolvable.
+class Scenario:
+    pass

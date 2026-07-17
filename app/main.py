@@ -8,6 +8,13 @@ from app.routes.debt import router as debt_router
 from app.routes.hardship import router as hardship_router
 from app.routes.collections import router as collection_router
 from app.routes.resilience import router as resilience_router
+from app.routes.strategy import router as strategy_router
+from app.routes.dashboard import router as dashboard_router
+from app.routes.spending import router as spending_router
+from app.routes.goals import router as goals_router
+from app.routes.balance_transfer import router as balance_transfer_router
+from app.routes.transactions import router as transactions_router
+from app.routes.calculators import router as calculators_router
 
 
 
@@ -18,7 +25,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Navorafi API",
     description="Financial crisis navigation - hardship programs, settlement, collections guidance",
-    version="1.0.0-stage4"
+    version="2.0.0-full"
 )
 
 # CORS middleware - origins from environment, defaults to localhost for development
@@ -49,14 +56,20 @@ async def root():
     return {
         "message": "Welcome to Financial Reset API",
         "docs": "/docs",
-        "version": "0.7.0",
+        "version": "2.0.0-full",
         "features": [
             "User authentication",
             "Debt tracking",
-            "Optimization strategies",
-            "Financial dashboard",
-            "Spending analysis",
-            "Transaction import & analysis"
+            "Hardship programs",
+            "Collections guidance",
+            "Resilience scoring",
+            "Optimization strategies (avalanche/snowball)",
+            "Financial dashboard & health metrics",
+            "Spending analysis & budgeting",
+            "Savings goals & scenarios",
+            "Balance transfer planning",
+            "Transaction import & analysis (CSV/PDF)",
+            "Financial calculators"
         ]
     }
 
@@ -67,3 +80,10 @@ app.include_router(debt_router)
 app.include_router(hardship_router)
 app.include_router(collection_router)
 app.include_router(resilience_router)
+app.include_router(strategy_router)
+app.include_router(dashboard_router)
+app.include_router(spending_router)
+app.include_router(goals_router)
+app.include_router(balance_transfer_router)
+app.include_router(transactions_router)
+app.include_router(calculators_router)
